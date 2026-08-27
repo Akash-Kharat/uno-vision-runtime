@@ -46,7 +46,9 @@ class Settings(BaseSettings):
     OPENCL_DEVICE_TYPE: str = Field("ALL", description="GPU, CPU, or ALL")
     OPENCL_PREFERRED_VENDOR: str = Field("Qualcomm", description="Preferred OpenCL vendor")
     PREPROCESSING_BACKEND: str = Field("AUTO", description="AUTO, OPENCL, or CPU")
+    OPENCL_MEMORY_MODE: str = Field("AUTO", description="AUTO, COPY, or MAPPED")
     ENABLE_OPENCL_PROFILING: bool = Field(True, description="Expose precise OpenCL queue timing")
+    OPENCL_AUTO_BENCHMARK_AT_STARTUP: bool = Field(False, description="Run one-time benchmark at startup to decide AUTO")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

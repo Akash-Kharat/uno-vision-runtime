@@ -133,6 +133,13 @@ class DetectionService:
         gpu_download_ms = timings.pop("gpu_download_ms", None)
         total_gpu_time_ms = timings.pop("total_gpu_time_ms", None)
         
+        in_reused = timings.pop("input_buffer_reused", None)
+        if in_reused is not None:
+            in_reused = bool(in_reused)
+        out_reused = timings.pop("output_buffer_reused", None)
+        if out_reused is not None:
+            out_reused = bool(out_reused)
+        
         return DetectionResponse(
             request_id=f"req_{uuid.uuid4().hex[:10]}",
             success=True,
@@ -150,6 +157,8 @@ class DetectionService:
                 gpu_kernel_ms=gpu_kernel_ms,
                 gpu_download_ms=gpu_download_ms,
                 total_gpu_time_ms=total_gpu_time_ms,
+                input_buffer_reused=in_reused,
+                output_buffer_reused=out_reused,
                 inner=timings if timings else None,
                 diagnostics=diagnostics
             ),

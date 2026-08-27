@@ -56,6 +56,8 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
     gpu_kern_times = []
     gpu_down_times = []
     gpu_tot_times = []
+    in_reuse_times = []
+    out_reuse_times = []
     
     profiler = PerformanceProfiler(enabled=req.include_detailed_profiling)
 
@@ -95,6 +97,10 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
                     gpu_down_times.append(timings.gpu_download_ms)
                 if timings.total_gpu_time_ms is not None:
                     gpu_tot_times.append(timings.total_gpu_time_ms)
+                if timings.input_buffer_reused is not None:
+                    in_reuse_times.append(1.0 if timings.input_buffer_reused else 0.0)
+                if timings.output_buffer_reused is not None:
+                    out_reuse_times.append(1.0 if timings.output_buffer_reused else 0.0)
             successful += 1
             
             if process:
@@ -152,6 +158,8 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
         "gpu_kernel_ms": calc(gpu_kern_times),
         "gpu_download_ms": calc(gpu_down_times),
         "total_gpu_ms": calc(gpu_tot_times),
+        "input_buffer_reused": calc(in_reuse_times),
+        "output_buffer_reused": calc(out_reuse_times),
         "effective_fps": float(fps)
     }
     

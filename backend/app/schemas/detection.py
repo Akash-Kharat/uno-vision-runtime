@@ -27,6 +27,8 @@ class DetectionTimings(BaseModel):
     gpu_kernel_ms: float | None = None
     gpu_download_ms: float | None = None
     total_gpu_time_ms: float | None = None
+    input_buffer_reused: bool | None = None
+    output_buffer_reused: bool | None = None
 
     inner: dict[str, float] | None = None
     diagnostics: dict[str, Any] | None = None

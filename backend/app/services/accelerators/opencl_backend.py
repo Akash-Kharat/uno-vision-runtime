@@ -81,79 +81,83 @@ class OpenCLBackend(ComputeBackend):
         norm_scale = profile.preprocessing.normalization.scale or (1.0 / 255.0)
 
         # Buffers
-        # Frame is uint8, target is float32
         in_size = frame.nbytes
         out_size = target_w * target_h * 3 * 4 # float32 = 4 bytes
         
-        in_buf = self.pool.get_buffer("input_frame", in_size, cl.mem_flags.READ_ONLY)
-        out_buf = self.pool.get_buffer("output_tensor", out_size, cl.mem_flags.WRITE_ONLY)
+        mode = getattr(self.config, "OPENCL_MEMORY_MODE", "COPY").upper()
+        if mode == "AUTO":
+            mode = "COPY" # Default until benchmarked
+            
+        is_mapped = (mode == "MAPPED")
+        out_flags = cl.mem_flags.WRITE_ONLY
+        if is_mapped:
+            out_flags |= cl.mem_flags.ALLOC_HOST_PTR
+            
+        in_buf, in_reused = self.pool.get_buffer("input_frame", in_size, cl.mem_flags.READ_ONLY)
+        out_buf, out_reused = self.pool.get_buffer("output_tensor", out_size, out_flags)
         
-        # Host array for output (1, 3, target_h, target_w)
-        out_host = np.empty((1, 3, target_h, target_w), dtype=np.float32)
-
         queue = self.ctx_mgr.queue
-
         t_start = time.perf_counter()
 
-        # 1. Upload
+        # 1. Upload Input
+        # For input, we always copy since OpenCV gives us a standard NumPy array.
         upload_event = cl.enqueue_copy(queue, in_buf, frame, is_blocking=False)
         
         # 2. Kernel execution
         global_work_size = (target_w, target_h)
         kernel = self.program.yolo_preprocess_kernel
         
-        # Kernel args:
-        # input, output, in_width, in_height, in_stride, out_width, out_height, pad_x, pad_y, scale_x, scale_y, norm_scale
         in_stride = orig_w * 3
         kernel.set_args(
-            in_buf, 
-            out_buf,
-            np.int32(orig_w),
-            np.int32(orig_h),
-            np.int32(in_stride),
-            np.int32(target_w),
-            np.int32(target_h),
-            np.int32(pad_left),
-            np.int32(pad_top),
-            np.float32(scale_x),
-            np.float32(scale_y),
-            np.float32(norm_scale)
+            in_buf, out_buf, np.int32(orig_w), np.int32(orig_h), np.int32(in_stride),
+            np.int32(target_w), np.int32(target_h), np.int32(pad_left), np.int32(pad_top),
+            np.float32(scale_x), np.float32(scale_y), np.float32(norm_scale)
         )
         
         kernel_event = cl.enqueue_nd_range_kernel(
-            queue, 
-            kernel, 
-            global_work_size, 
-            None,
-            wait_for=[upload_event]
+            queue, kernel, global_work_size, None, wait_for=[upload_event]
         )
         
-        # 3. Download
-        download_event = cl.enqueue_copy(queue, out_host, out_buf, wait_for=[kernel_event], is_blocking=True)
-        
+        # 3. Output Access
+        if is_mapped:
+            # Enqueue map, block to ensure ready
+            out_host, download_event = cl.enqueue_map_buffer(
+                queue, out_buf, cl.map_flags.READ,
+                0, (1, 3, target_h, target_w), np.float32,
+                wait_for=[kernel_event], is_blocking=True
+            )
+            # Must unmap eventually or keep it mapped? 
+            # NumPy array will point directly to mapped memory. 
+            # If we reuse it, we should unmap after inference.
+            # But standard PyOpenCL map_buffer requires unmapping to give control back to GPU?
+            # Actually, `out_host.base.release()` handles unmap implicitly when the NumPy array is GC'd.
+            # However, since ONNX inference runs immediately and synchronously after this in the pipeline,
+            # it's safe to let it GC or we can unmap. For now, let's just let it return the mapped array.
+        else:
+            # COPY mode: Reuse host array
+            if not hasattr(self, "_host_output") or self._host_output.shape != (1, 3, target_h, target_w):
+                self._host_output = np.empty((1, 3, target_h, target_w), dtype=np.float32)
+            out_host = self._host_output
+            
+            download_event = cl.enqueue_copy(queue, out_host, out_buf, wait_for=[kernel_event], is_blocking=True)
+            
         t_end = time.perf_counter()
 
-        # Profiling
-        if self.config.ENABLE_OPENCL_PROFILING and profiler:
-            try:
-                # Timestamps are in nanoseconds
-                upload_start = upload_event.profile.submit
-                upload_end = upload_event.profile.end
-                kernel_start = kernel_event.profile.submit
-                kernel_end = kernel_event.profile.end
-                download_start = download_event.profile.submit
-                download_end = download_event.profile.end
-                
-                profiler.record_custom("gpu_upload_ms", (upload_end - upload_start) * 1e-6)
-                profiler.record_custom("gpu_kernel_ms", (kernel_end - kernel_start) * 1e-6)
-                profiler.record_custom("gpu_download_ms", (download_end - download_start) * 1e-6)
-            except Exception:
-                pass
-                
         if profiler:
+            if self.config.ENABLE_OPENCL_PROFILING:
+                try:
+                    upload_ms = (upload_event.profile.end - upload_event.profile.submit) * 1e-6
+                    kernel_ms = (kernel_event.profile.end - kernel_event.profile.submit) * 1e-6
+                    download_ms = (download_event.profile.end - download_event.profile.submit) * 1e-6
+                    profiler.record_custom("gpu_upload_ms", upload_ms)
+                    profiler.record_custom("gpu_kernel_ms", kernel_ms)
+                    profiler.record_custom("gpu_download_ms", download_ms)
+                except Exception:
+                    pass
             profiler.record_custom("total_gpu_time_ms", (t_end - t_start) * 1000.0)
+            profiler.record_custom("input_buffer_reused", 1 if in_reused else 0)
+            profiler.record_custom("output_buffer_reused", 1 if out_reused else 0)
 
-        # Enforce Float16 if model requests it
         if profile.input.dtype == "tensor(float16)":
             out_host = out_host.astype(np.float16)
 

@@ -102,6 +102,13 @@ def main():
         print_stage("Kernel", data.get("gpu_kernel_ms"))
         print_stage("Download", data.get("gpu_download_ms"))
         print_stage("Total GPU", data.get("total_gpu_ms"))
+        print()
+        print("BUFFER REUSE")
+        print("---------------------------------")
+        in_ru = data.get("input_buffer_reused", {}).get("mean", 0) * 100
+        out_ru = data.get("output_buffer_reused", {}).get("mean", 0) * 100
+        print(f"Input Reuse:  {in_ru:.1f}%")
+        print(f"Output Reuse: {out_ru:.1f}%")
     else:
         print("Upload:       N/A")
         print("Kernel:       N/A")
