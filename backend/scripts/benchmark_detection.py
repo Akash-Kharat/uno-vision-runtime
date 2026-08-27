@@ -1,108 +1,102 @@
-"""CLI Benchmark Tool for UNO Vision Runtime."""
+#!/usr/bin/env python3
+"""
+UNO Vision Runtime Benchmark CLI.
+
+Thin client for:
+    POST /api/v1/benchmark/run
+
+The benchmark API is the single source of truth. This script only:
+- parses CLI arguments
+- sends the benchmark request
+- validates the response
+- formats the benchmark report
+"""
+
+from __future__ import annotations
 
 import argparse
-import json
-import urllib.request
-import urllib.error
 import sys
+from typing import Any
 
-def main():
-    parser = argparse.ArgumentParser(description="UNO Vision Runtime Benchmark Tool")
-    parser.add_argument("--url", type=str, default="http://127.0.0.1:8000", help="Base URL of the runtime")
-    parser.add_argument("--iterations", type=int, default=100, help="Number of benchmark iterations")
-    parser.add_argument("--warmup", type=int, default=10, help="Number of warm-up iterations")
-    parser.add_argument("--detailed", action="store_true", help="Include detailed profiling")
-    parser.add_argument("--json-output", type=str, help="Path to write JSON results")
-    
-    args = parser.parse_args()
-    
-    endpoint = f"{args.url}/api/v1/benchmark/run"
-    payload = {
-        "iterations": args.iterations,
-        "warmup_iterations": args.warmup,
-        "include_detailed_profiling": args.detailed
-    }
-    
-    req = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'}
-    )
-    
-    print(f"Running benchmark on {args.url} (Warmup: {args.warmup}, Iterations: {args.iterations})...")
-    
+import requests
+
+
+DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+BENCHMARK_ENDPOINT = "/api/v1/benchmark/run"
+
+
+def format_ms(value: Any) -> str:
+    """Format a millisecond value without converting missing values to zero."""
+    if value is None:
+        return "N/A"
+
     try:
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode('utf-8'))
-    except urllib.error.HTTPError as e:
-        print(f"Error: Server returned {e.code}")
-        body = e.read().decode('utf-8')
-        print(body)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error connecting to {args.url}: {e}")
-        sys.exit(1)
-        
-    if args.json_output:
-        with open(args.json_output, 'w') as f:
-            json.dump(data, f, indent=2)
-        print(f"Wrote raw JSON to {args.json_output}\n")
-        
-    print("=================================================")
-    print("UNO VISION RUNTIME BENCHMARK")
-    print("=================================================")
-    print()
-    print("Model:")
-    print(f"  {data.get('model_name', data.get('model_id', 'Unknown'))}")
-    
-    shape = data.get('input_shape')
-    if shape:
-        print(f"  Shape: {shape}")
-    print()
-    print("Iterations:")
-    print(f"  Warmup:     {args.warmup}")
-    print(f"  Measured:   {data['iterations']}")
-    print(f"  Success:    {data['successful_iterations']}")
-    print(f"  Failed:     {data['failed_iterations']}")
-    print()
-    def get_val(stats, key):
-        if stats is None or key not in stats:
-            return "N/A"
-        return f"{stats[key]:.2f} ms"
+        return f"{float(value):.2f} ms"
+    except (TypeError, ValueError):
+        return "N/A"
 
-    def print_stage(name, stats):
-        print(f"{name}:")
-        print(f"  Mean:       {get_val(stats, 'mean')}")
-        print(f"  P50:        {get_val(stats, 'p50')}")
-        print(f"  P95:        {get_val(stats, 'p95')}")
-        print(f"  P99:        {get_val(stats, 'p99')}")
 
-    print("TOTAL LATENCY")
-    print("---------------------------------")
-    print_stage("Total", data.get("total_ms"))
-    print()
-    print("PIPELINE")
-    print("---------------------------------")
-    print_stage("Capture", data.get("capture_ms"))
-    print_stage("Preprocess", data.get("preprocessing_ms"))
-    print_stage("Inference", data.get("inference_ms"))
-    print_stage("Postprocess", data.get("postprocessing_ms"))
-    print()
-    
-    backend = data.get("preprocessing_backend", "CPU")
-    if backend == "AUTO" or backend == "OPENCL":
-        # Usually it should resolve to OPENCL or CPU in practice, but API might just echo config
-        pass
-        
+def format_number(value: Any, decimals: int = 2) -> str:
+    """Format a numeric value safely."""
+    if value is None:
+        return "N/A"
+
+    try:
+        return f"{float(value):.{decimals}f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def get_metric(data: dict[str, Any], section: str, key: str) -> Any:
+    """
+    Safely retrieve nested benchmark metrics.
+
+    Example:
+        get_metric(data, "total_ms", "mean")
+    """
+    metrics = data.get(section)
+
+    if not isinstance(metrics, dict):
+        return None
+
+    return metrics.get(key)
+
+
+def print_metric_block(
+    data: dict[str, Any],
+    title: str,
+    section: str,
+) -> None:
+    """Print mean and percentile values for a benchmark stage."""
+
+    print(f"{title}:")
+
+    for label, key in (
+        ("Mean", "mean"),
+        ("P50", "p50"),
+        ("P95", "p95"),
+        ("P99", "p99"),
+    ):
+        value = get_metric(data, section, key)
+        print(f"  {label:<11} {format_ms(value)}")
+
+
+def print_gpu_metrics(data: dict[str, Any]) -> None:
+    """Print optional OpenCL GPU timing metrics."""
+
+    backend = data.get("preprocessing_backend", "UNKNOWN")
+
     print("PREPROCESSING BACKEND")
     print("---------------------------------")
     print(f"Backend: {backend}")
+
     if data.get("total_gpu_ms"):
         print_stage("Upload", data.get("gpu_upload_ms"))
         print_stage("Kernel", data.get("gpu_kernel_ms"))
         print_stage("Download", data.get("gpu_download_ms"))
         print_stage("Total GPU", data.get("total_gpu_ms"))
         print()
+
         print("BUFFER REUSE")
         print("---------------------------------")
         in_ru = data.get("input_buffer_reused", {}).get("mean", 0) * 100
@@ -114,12 +108,255 @@ def main():
         print("Kernel:       N/A")
         print("Download:     N/A")
         print("Total GPU:    N/A")
+
     print()
+
+
+def print_memory_metrics(data: dict[str, Any]) -> None:
+    """Print memory metrics when available."""
+
+    memory = data.get("memory")
+
+    if not isinstance(memory, dict):
+        return
+
+    print("MEMORY")
+    print("---------------------------------")
+
+    print(
+        "RSS Start:    "
+        f"{format_number(memory.get('rss_memory_mb_start'))} MB"
+    )
+    print(
+        "RSS End:      "
+        f"{format_number(memory.get('rss_memory_mb_end'))} MB"
+    )
+    print(
+        "RSS Peak:     "
+        f"{format_number(memory.get('rss_memory_mb_peak'))} MB"
+    )
+    print()
+
+
+def print_report(data: dict[str, Any], warmup: int) -> None:
+    """Render the complete benchmark report."""
+
+    print("=" * 49)
+    print("UNO VISION RUNTIME BENCHMARK")
+    print("=" * 49)
+    print()
+
+    print("Model:")
+    print(f"  {data.get('model_name', 'N/A')}")
+    print(f"  Shape: {data.get('input_shape', 'N/A')}")
+    print()
+
+    print("Iterations:")
+    print(f"  Warmup:     {warmup}")
+    print(f"  Measured:   {data.get('iterations', 'N/A')}")
+    print(f"  Success:    {data.get('successful_iterations', 'N/A')}")
+    print(f"  Failed:     {data.get('failed_iterations', 'N/A')}")
+    print()
+
+    print("TOTAL LATENCY")
+    print("---------------------------------")
+    print_metric_block(data, "Total", "total_ms")
+    print()
+
+    print("PIPELINE")
+    print("---------------------------------")
+    print_metric_block(data, "Capture", "capture_ms")
+    print()
+
+    print_metric_block(data, "Preprocess", "preprocessing_ms")
+    print()
+
+    print_metric_block(data, "Inference", "inference_ms")
+    print()
+
+    print_metric_block(data, "Postprocess", "postprocessing_ms")
+    print()
+
+    print_gpu_metrics(data)
+    print_memory_metrics(data)
+
     print("PERFORMANCE")
     print("---------------------------------")
-    fps = data.get('effective_fps')
-    print(f"Effective FPS:{fps:.2f}" if fps is not None else "Effective FPS: N/A")
-    print("=================================================")
+    print(
+        f"Effective FPS: "
+        f"{format_number(data.get('effective_fps'))}"
+    )
+
+    print("=" * 49)
+
+
+def run_benchmark(
+    base_url: str,
+    warmup: int,
+    iterations: int,
+    timeout: float,
+) -> int:
+    """Call the benchmark API and print the result."""
+
+    url = f"{base_url.rstrip('/')}{BENCHMARK_ENDPOINT}"
+
+    payload = {
+        "warmup": warmup,
+        "iterations": iterations,
+    }
+
+    print(
+        f"Running benchmark on {base_url} "
+        f"(Warmup: {warmup}, Iterations: {iterations})..."
+    )
+
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=timeout,
+        )
+
+    except requests.ConnectionError:
+        print(
+            f"Error: Cannot connect to UNO Vision Runtime at {base_url}",
+            file=sys.stderr,
+        )
+        print(
+            "Make sure the server is running:",
+            file=sys.stderr,
+        )
+        print(
+            "  uvicorn app.main:app --host 0.0.0.0 --port 8000",
+            file=sys.stderr,
+        )
+        return 1
+
+    except requests.Timeout:
+        print(
+            f"Error: Benchmark request timed out after {timeout:.0f} seconds.",
+            file=sys.stderr,
+        )
+        return 1
+
+    except requests.RequestException as exc:
+        print(
+            f"Error: Benchmark request failed: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        data = response.json()
+    except ValueError:
+        print(
+            f"Error: Server returned HTTP {response.status_code}",
+            file=sys.stderr,
+        )
+        print(response.text, file=sys.stderr)
+        return 1
+
+    if response.status_code != 200:
+        print(
+            f"Error: Server returned {response.status_code}",
+            file=sys.stderr,
+        )
+
+        error = data.get("error")
+        detail = data.get("detail")
+
+        if error:
+            if isinstance(error, dict):
+                print(
+                    f"{error.get('code', 'ERROR')}: "
+                    f"{error.get('message', 'Unknown error')}",
+                    file=sys.stderr,
+                )
+            else:
+                print(error, file=sys.stderr)
+
+        elif detail:
+            print(detail, file=sys.stderr)
+
+        else:
+            print(data, file=sys.stderr)
+
+        return 1
+
+    if data.get("success") is not True:
+        print(
+            "Error: Benchmark API returned an unsuccessful result.",
+            file=sys.stderr,
+        )
+        print(data, file=sys.stderr)
+        return 1
+
+    print_report(data, warmup)
+
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+
+    parser = argparse.ArgumentParser(
+        description="UNO Vision Runtime benchmark client."
+    )
+
+    parser.add_argument(
+        "--url",
+        default=DEFAULT_BASE_URL,
+        help=(
+            "UNO Vision Runtime base URL "
+            f"(default: {DEFAULT_BASE_URL})"
+        ),
+    )
+
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=10,
+        help="Number of warmup iterations (default: 10)",
+    )
+
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=100,
+        help="Number of measured iterations (default: 100)",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=600.0,
+        help="HTTP timeout in seconds (default: 600)",
+    )
+
+    args = parser.parse_args()
+
+    if args.warmup < 0:
+        parser.error("--warmup must be >= 0")
+
+    if args.iterations <= 0:
+        parser.error("--iterations must be > 0")
+
+    if args.timeout <= 0:
+        parser.error("--timeout must be > 0")
+
+    return args
+
+
+def main() -> int:
+    args = parse_args()
+
+    return run_benchmark(
+        base_url=args.url,
+        warmup=args.warmup,
+        iterations=args.iterations,
+        timeout=args.timeout,
+    )
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
