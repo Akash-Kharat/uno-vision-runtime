@@ -52,6 +52,10 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
     inf_times = []
     post_times = []
     tot_times = []
+    gpu_up_times = []
+    gpu_kern_times = []
+    gpu_down_times = []
+    gpu_tot_times = []
     
     profiler = PerformanceProfiler(enabled=req.include_detailed_profiling)
 
@@ -83,6 +87,14 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
                 inf_times.append(timings.inference_time_ms)
                 post_times.append(timings.postprocessing_time_ms)
                 tot_times.append(timings.total_time_ms)
+                if timings.gpu_upload_ms is not None:
+                    gpu_up_times.append(timings.gpu_upload_ms)
+                if timings.gpu_kernel_ms is not None:
+                    gpu_kern_times.append(timings.gpu_kernel_ms)
+                if timings.gpu_download_ms is not None:
+                    gpu_down_times.append(timings.gpu_download_ms)
+                if timings.total_gpu_time_ms is not None:
+                    gpu_tot_times.append(timings.total_gpu_time_ms)
             successful += 1
             
             if process:
@@ -127,6 +139,7 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
         "model_id": desc.model_id,
         "model_name": request.app.state.model_registry.get_metadata(desc.model_id).original_filename,
         "input_shape": input_shape,
+        "preprocessing_backend": request.app.state.settings.PREPROCESSING_BACKEND.upper(),
         "iterations": req.iterations,
         "successful_iterations": successful,
         "failed_iterations": failed,
@@ -135,6 +148,10 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
         "preprocessing_ms": calc(pre_times),
         "inference_ms": calc(inf_times),
         "postprocessing_ms": calc(post_times),
+        "gpu_upload_ms": calc(gpu_up_times),
+        "gpu_kernel_ms": calc(gpu_kern_times),
+        "gpu_download_ms": calc(gpu_down_times),
+        "total_gpu_ms": calc(gpu_tot_times),
         "effective_fps": float(fps)
     }
     

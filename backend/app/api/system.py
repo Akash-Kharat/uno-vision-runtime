@@ -44,7 +44,7 @@ async def activate_provider(provider: str, request: Request):
     return {"success": True, "active_provider": provider}
 
 @router.get("/hardware", response_model=HardwareCapabilities)
-async def get_hardware():
+async def get_hardware(request: Request):
     """Get hardware capabilities and environment snapshot."""
     cpu_freq = None
     try:
@@ -54,22 +54,29 @@ async def get_hardware():
         
     mem = psutil.virtual_memory()
     
-    return HardwareCapabilities(
-        cpu=HardwareCpuInfo(
+    accelerators = {}
+    if hasattr(request.app.state, 'opencl_backend'):
+        ocl_backend = request.app.state.opencl_backend
+        if ocl_backend.is_available():
+            accelerators["opencl"] = ocl_backend.get_device_info()
+    
+    return {
+        "cpu": HardwareCpuInfo(
             architecture=platform.machine(),
             cores=psutil.cpu_count(logical=False) or 1,
             logical_cores=psutil.cpu_count(logical=True),
             frequency_mhz=cpu_freq
-        ),
-        memory=HardwareMemoryInfo(
+        ).model_dump(),
+        "memory": HardwareMemoryInfo(
             total_mb=mem.total / (1024 * 1024),
             available_mb=mem.available / (1024 * 1024)
-        ),
-        onnxruntime=HardwareOnnxRuntimeInfo(
+        ).model_dump(),
+        "onnxruntime": HardwareOnnxRuntimeInfo(
             version=ort.__version__,
             available_providers=ort.get_available_providers()
-        )
-    )
+        ).model_dump(),
+        "accelerators": accelerators
+    }
 
 @router.get("/diagnostics")
 async def get_diagnostics(request: Request):

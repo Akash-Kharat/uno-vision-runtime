@@ -67,6 +67,10 @@ def test_benchmark_api_success(app_and_client):
     timings_mock.inference_time_ms = 3.0
     timings_mock.postprocessing_time_ms = 4.0
     timings_mock.total_time_ms = 10.0
+    timings_mock.gpu_upload_ms = None
+    timings_mock.gpu_kernel_ms = None
+    timings_mock.gpu_download_ms = None
+    timings_mock.total_gpu_time_ms = None
     resp_mock.timings = timings_mock
     
     app.state.detection_service.detect_current_frame = MagicMock(return_value=resp_mock)

@@ -15,11 +15,11 @@ from app.services.output_registry import output_registry
 logger = logging.getLogger(__name__)
 
 class DetectionService:
-    def __init__(self, camera_manager, runtime_manager, registry):
+    def __init__(self, camera_manager, runtime_manager, registry, opencl_backend=None, config=None):
         self.camera_manager = camera_manager
         self.runtime_manager = runtime_manager
         self.registry = registry
-        self.preprocessor = Preprocessor()
+        self.preprocessor = Preprocessor(backend=opencl_backend, config=config)
 
     def detect_current_frame(self, profiler=None) -> DetectionResponse:
         from app.domain.performance import PerformanceProfiler
@@ -44,7 +44,7 @@ class DetectionService:
             # 4. Preprocessing
             with p.measure("preprocessing_time_ms"):
                 try:
-                    preprocessed = self.preprocessor.preprocess_frame(frame, descriptor.profile)
+                    preprocessed = self.preprocessor.preprocess_frame(frame, descriptor.profile, profiler=p)
                 except Exception as e:
                     raise AppError(code="PREPROCESSING_FAILED", message=str(e), status_code=500)
                 
@@ -128,6 +128,11 @@ class DetectionService:
         post_ms = timings.pop("postprocessing_time_ms", 0.0)
         total_ms = timings.pop("total_time_ms", 0.0)
         
+        gpu_upload_ms = timings.pop("gpu_upload_ms", None)
+        gpu_kernel_ms = timings.pop("gpu_kernel_ms", None)
+        gpu_download_ms = timings.pop("gpu_download_ms", None)
+        total_gpu_time_ms = timings.pop("total_gpu_time_ms", None)
+        
         return DetectionResponse(
             request_id=f"req_{uuid.uuid4().hex[:10]}",
             success=True,
@@ -141,6 +146,10 @@ class DetectionService:
                 inference_time_ms=inf_ms,
                 postprocessing_time_ms=post_ms,
                 total_time_ms=total_ms,
+                gpu_upload_ms=gpu_upload_ms,
+                gpu_kernel_ms=gpu_kernel_ms,
+                gpu_download_ms=gpu_download_ms,
+                total_gpu_time_ms=total_gpu_time_ms,
                 inner=timings if timings else None,
                 diagnostics=diagnostics
             ),

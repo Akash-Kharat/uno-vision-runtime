@@ -37,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from app.services.execution_provider_manager import ExecutionProviderManager
     from app.services.onnx_session_factory import ONNXSessionFactory
     from app.services.provider_benchmark_manager import ProviderBenchmarkManager
+    from app.services.accelerators.opencl_backend import OpenCLBackend
     
     # Attach settings and managers so lifecycle and handlers can access them
     app.state.settings = settings
@@ -44,15 +45,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     camera_manager = CameraManager(settings)
     model_registry = ModelRegistry(settings)
     
+    # Initialize OpenCL backend for preprocessing
+    opencl_backend = OpenCLBackend(settings)
+    opencl_backend.initialize()
+    
     # Initialize execution provider manager
     ep_manager = ExecutionProviderManager()
     session_factory = ONNXSessionFactory(ep_manager)
     
     runtime_manager = RuntimeManager(session_factory=session_factory)
     detection_service = DetectionService(
-        camera_manager, 
-        runtime_manager,
-        model_registry
+        camera_manager=camera_manager, 
+        runtime_manager=runtime_manager,
+        registry=model_registry,
+        opencl_backend=opencl_backend,
+        config=settings
     )
     inference_manager = InferenceRuntimeManager(
         camera_manager,
@@ -77,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.execution_provider_manager = ep_manager
     app.state.onnx_session_factory = session_factory
     app.state.provider_benchmark_manager = provider_benchmark_manager
+    app.state.opencl_backend = opencl_backend
 
     # Exception handlers
     register_exception_handlers(app)

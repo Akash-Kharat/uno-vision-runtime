@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 
+from typing import Any
 from app.domain.enums import ColorFormat, ResizeMethod, NormalizationType, InputLayout
 from app.schemas.profile import ModelProfile
 from app.domain.detection import PreprocessedInput
@@ -10,12 +11,27 @@ from app.core.exceptions import AppError
 
 class Preprocessor:
     """Handles image preprocessing for model inference."""
+    
+    def __init__(self, backend=None, config=None):
+        self.backend = backend
+        self.config = config
 
-    def preprocess_frame(self, frame: np.ndarray, profile: ModelProfile) -> PreprocessedInput:
+    def preprocess_frame(self, frame: np.ndarray, profile: ModelProfile, profiler: Any = None) -> PreprocessedInput:
         """Preprocesses a BGR OpenCV frame according to the model profile."""
         if frame is None or frame.size == 0:
             raise AppError(code="PREPROCESSING_FAILED", message="Empty frame provided", status_code=500)
-
+            
+        # Try OpenCL if configured
+        if self.backend and self.backend.is_available() and self.config:
+            backend_mode = self.config.PREPROCESSING_BACKEND.upper()
+            if backend_mode in ("AUTO", "OPENCL"):
+                try:
+                    return self.backend.preprocess_yolo(frame, profile, profiler)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"OpenCL preprocessing failed, falling back to CPU: {e}")
+                    
+        # CPU Fallback
         original_height, original_width = frame.shape[:2]
 
         input_prof = profile.input

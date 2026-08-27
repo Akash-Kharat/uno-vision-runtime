@@ -28,3 +28,7 @@ class PerformanceProfiler:
 
     def get_timing(self, name: str) -> float:
         return self.timings.get(name, 0.0)
+
+    def record_custom(self, name: str, value_ms: float) -> None:
+        if self.enabled:
+            self.timings[name] = value_ms

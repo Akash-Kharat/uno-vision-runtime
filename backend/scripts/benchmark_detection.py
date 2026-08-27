@@ -88,6 +88,26 @@ def main():
     print_stage("Inference", data.get("inference_ms"))
     print_stage("Postprocess", data.get("postprocessing_ms"))
     print()
+    
+    backend = data.get("preprocessing_backend", "CPU")
+    if backend == "AUTO" or backend == "OPENCL":
+        # Usually it should resolve to OPENCL or CPU in practice, but API might just echo config
+        pass
+        
+    print("PREPROCESSING BACKEND")
+    print("---------------------------------")
+    print(f"Backend: {backend}")
+    if data.get("total_gpu_ms"):
+        print_stage("Upload", data.get("gpu_upload_ms"))
+        print_stage("Kernel", data.get("gpu_kernel_ms"))
+        print_stage("Download", data.get("gpu_download_ms"))
+        print_stage("Total GPU", data.get("total_gpu_ms"))
+    else:
+        print("Upload:       N/A")
+        print("Kernel:       N/A")
+        print("Download:     N/A")
+        print("Total GPU:    N/A")
+    print()
     print("PERFORMANCE")
     print("---------------------------------")
     fps = data.get('effective_fps')

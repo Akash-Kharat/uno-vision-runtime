@@ -22,6 +22,12 @@ class DetectionTimings(BaseModel):
     inference_time_ms: float
     postprocessing_time_ms: float
     total_time_ms: float
+
+    gpu_upload_ms: float | None = None
+    gpu_kernel_ms: float | None = None
+    gpu_download_ms: float | None = None
+    total_gpu_time_ms: float | None = None
+
     inner: dict[str, float] | None = None
     diagnostics: dict[str, Any] | None = None
 

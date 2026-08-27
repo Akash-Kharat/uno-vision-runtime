@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     MAX_PRE_NMS_DETECTIONS: int = Field(300, description="Max candidate boxes to feed into NMS")
     MAX_DETECTIONS: int = Field(100, description="Max final detections to output")
     ENABLE_DETAILED_PROFILING: bool = Field(False, description="Turn on inner profiling steps by default")
+    
+    # Preprocessing & Hardware Acceleration
+    ENABLE_OPENCL: bool = Field(True, description="Enable OpenCL backend discovery")
+    OPENCL_DEVICE_TYPE: str = Field("ALL", description="GPU, CPU, or ALL")
+    OPENCL_PREFERRED_VENDOR: str = Field("Qualcomm", description="Preferred OpenCL vendor")
+    PREPROCESSING_BACKEND: str = Field("AUTO", description="AUTO, OPENCL, or CPU")
+    ENABLE_OPENCL_PROFILING: bool = Field(True, description="Expose precise OpenCL queue timing")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

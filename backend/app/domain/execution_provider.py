@@ -39,6 +39,7 @@ class HardwareCapabilities(BaseModel):
     cpu: HardwareCpuInfo
     memory: HardwareMemoryInfo
     onnxruntime: HardwareOnnxRuntimeInfo
+    accelerators: dict = {}
 
 class ProviderBenchmarkResult(BaseModel):
     provider: str
