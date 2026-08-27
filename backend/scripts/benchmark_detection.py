@@ -65,24 +65,33 @@ def main():
     print(f"  Success:    {data['successful_iterations']}")
     print(f"  Failed:     {data['failed_iterations']}")
     print()
+    def get_val(stats, key):
+        if stats is None or key not in stats:
+            return "N/A"
+        return f"{stats[key]:.2f} ms"
+
+    def print_stage(name, stats):
+        print(f"{name}:")
+        print(f"  Mean:       {get_val(stats, 'mean')}")
+        print(f"  P50:        {get_val(stats, 'p50')}")
+        print(f"  P95:        {get_val(stats, 'p95')}")
+        print(f"  P99:        {get_val(stats, 'p99')}")
+
     print("TOTAL LATENCY")
     print("---------------------------------")
-    t = data['total_ms']
-    print(f"Mean:         {t['mean']:.2f} ms")
-    print(f"P50:          {t['p50']:.2f} ms")
-    print(f"P95:          {t['p95']:.2f} ms")
-    print(f"P99:          {t['p99']:.2f} ms")
+    print_stage("Total", data.get("total_ms"))
     print()
     print("PIPELINE")
     print("---------------------------------")
-    print(f"Capture:      {data['capture_ms']['mean']:.2f} ms")
-    print(f"Preprocess:   {data['preprocessing_ms']['mean']:.2f} ms")
-    print(f"Inference:    {data['inference_ms']['mean']:.2f} ms")
-    print(f"Postprocess:  {data['postprocessing_ms']['mean']:.2f} ms")
+    print_stage("Capture", data.get("capture_ms"))
+    print_stage("Preprocess", data.get("preprocessing_ms"))
+    print_stage("Inference", data.get("inference_ms"))
+    print_stage("Postprocess", data.get("postprocessing_ms"))
     print()
     print("PERFORMANCE")
     print("---------------------------------")
-    print(f"Effective FPS:{data['effective_fps']:.2f}")
+    fps = data.get('effective_fps')
+    print(f"Effective FPS:{fps:.2f}" if fps is not None else "Effective FPS: N/A")
     print("=================================================")
 
 if __name__ == "__main__":

@@ -1,0 +1,12 @@
+{
+  "id": "mdl_6aa5eb364e6a",
+  "original_filename": "test.onnx",
+  "created_at": "2026-08-27T09:29:48.397689+00:00",
+  "updated_at": "2026-08-27T09:29:48.397689+00:00",
+  "status": "CONFIGURATION_REQUIRED",
+  "file_size_bytes": 18,
+  "sha256": "d57b047644dd2b8e2b11ac8a9b885a5ee4336795858ad0bbc0bcf0922b177a75",
+  "inspection_file": "inspection.json",
+  "profile_file": null,
+  "runtime": "onnx"
+}

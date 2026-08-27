@@ -32,25 +32,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     from app.services.model_registry import ModelRegistry
     from app.services.runtime_manager import RuntimeManager
-
     from app.services.detection_service import DetectionService
     from app.services.inference_runtime_manager import InferenceRuntimeManager
+    from app.services.execution_provider_manager import ExecutionProviderManager
+    from app.services.onnx_session_factory import ONNXSessionFactory
+    from app.services.provider_benchmark_manager import ProviderBenchmarkManager
     
     # Attach settings and managers so lifecycle and handlers can access them
     app.state.settings = settings
-    app.state.camera_manager = CameraManager(settings)
-    app.state.model_registry = ModelRegistry(settings)
-    app.state.runtime_manager = RuntimeManager()
-    app.state.detection_service = DetectionService(
-        app.state.camera_manager, 
-        app.state.runtime_manager,
-        app.state.model_registry
+    
+    camera_manager = CameraManager(settings)
+    model_registry = ModelRegistry(settings)
+    
+    # Initialize execution provider manager
+    ep_manager = ExecutionProviderManager()
+    session_factory = ONNXSessionFactory(ep_manager)
+    
+    runtime_manager = RuntimeManager(session_factory=session_factory)
+    detection_service = DetectionService(
+        camera_manager, 
+        runtime_manager,
+        model_registry
     )
-    app.state.inference_manager = InferenceRuntimeManager(
-        app.state.camera_manager,
-        app.state.detection_service,
+    inference_manager = InferenceRuntimeManager(
+        camera_manager,
+        detection_service,
         target_fps=getattr(settings, "INFERENCE_TARGET_FPS", 5)
     )
+    # Complete circular injection for safe provider switching checks
+    ep_manager.inference_runtime_manager = inference_manager
+    
+    provider_benchmark_manager = ProviderBenchmarkManager(
+        provider_manager=ep_manager,
+        session_factory=session_factory,
+        detection_service=detection_service,
+        camera_manager=camera_manager
+    )
+
+    app.state.camera_manager = camera_manager
+    app.state.model_registry = model_registry
+    app.state.runtime_manager = runtime_manager
+    app.state.detection_service = detection_service
+    app.state.inference_manager = inference_manager
+    app.state.execution_provider_manager = ep_manager
+    app.state.onnx_session_factory = session_factory
+    app.state.provider_benchmark_manager = provider_benchmark_manager
 
     # Exception handlers
     register_exception_handlers(app)
@@ -77,6 +103,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     
     from app.api.benchmark import router as benchmark_router
     app.include_router(benchmark_router, prefix="/api/v1/benchmark", tags=["benchmark"])
+
+    from app.api.system import router as system_router
+    app.include_router(system_router, prefix="/api/v1/system", tags=["system"])
 
     return app
 

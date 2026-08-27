@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 class RuntimeManager:
     """Manages the active model runtime."""
     
-    def __init__(self) -> None:
+    def __init__(self, session_factory=None) -> None:
         self.lock = threading.Lock()
+        self.session_factory = session_factory
         self.active_descriptor: ModelRuntimeDescriptor | None = None
         self.active_session: ort.InferenceSession | None = None
         
@@ -25,12 +26,11 @@ class RuntimeManager:
     def load_model(self, descriptor: ModelRuntimeDescriptor) -> None:
         """Load a model into memory as a candidate. Does not activate it."""
         try:
-            # For now we use CPUExecutionProvider. 
-            # Future enhancements can dynamically select TensorRT or V4L2 accelerators.
-            session = ort.InferenceSession(
-                str(descriptor.model_path), 
-                providers=['CPUExecutionProvider']
-            )
+            if self.session_factory:
+                session_data = self.session_factory.create(descriptor.model_path)
+                session = session_data["session"]
+            else:
+                session = ort.InferenceSession(str(descriptor.model_path), providers=['CPUExecutionProvider'])
             
             with self.lock:
                 self.candidate_descriptor = descriptor

@@ -102,7 +102,7 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
     
     def calc(arr):
         if not arr:
-            return {"mean": 0.0, "p50": 0.0, "p95": 0.0, "p99": 0.0, "min": 0.0, "max": 0.0}
+            return None
         npa = np.array(arr)
         return {
             "mean": float(np.mean(npa)),
@@ -146,3 +146,22 @@ async def run_benchmark(req: BenchmarkRequest, request: Request):
         }
         
     return response_payload
+
+class ProviderBenchmarkRequest(BaseModel):
+    warmup: int = 5
+    iterations: int = 50
+
+@router.post("/providers")
+async def benchmark_providers(req: ProviderBenchmarkRequest, request: Request):
+    inference_manager = request.app.state.inference_manager
+    if inference_manager.state in ("RUNNING", "STARTING", "PAUSED"):
+        raise AppError(code="BENCHMARK_RUNTIME_CONFLICT", message="Background continuous inference is currently active.", status_code=409)
+        
+    camera_manager = request.app.state.camera_manager
+    if camera_manager.state != "RUNNING":
+        raise AppError(code="CAMERA_NOT_RUNNING", message="Camera must be running to benchmark.", status_code=400)
+        
+    benchmark_manager = request.app.state.provider_benchmark_manager
+    result = benchmark_manager.run_benchmark(req.warmup, req.iterations)
+    return result
+
