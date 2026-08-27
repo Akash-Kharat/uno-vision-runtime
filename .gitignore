@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime-generated model data
+backend/data/models/models/
+backend/data/models/runtime/
+
+# Generated camera/video test files
+backend/*.mjpg
+backend/*.raw
+backend/mjpeg_frame_*.jpg
+
+# Temporary files
+*.log
+*.tmp
