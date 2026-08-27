@@ -80,7 +80,23 @@ def print_metric_block(
         value = get_metric(data, section, key)
         print(f"  {label:<11} {format_ms(value)}")
 
+def print_stage(title: str, metric: Any) -> None:
+    """Print a benchmark timing stage."""
 
+    print(f"{title}:")
+    
+    if isinstance(metric, dict):
+        for label, key in (
+            ("Mean", "mean"),
+            ("P50", "p50"),
+            ("P95", "p95"),
+            ("P99", "p99"),
+        ):
+            value = metric.get(key)
+            print(f"  {label:<11} {format_ms(value)}")
+    else:
+        print(f"  Mean        {format_ms(metric)}")
+        
 def print_gpu_metrics(data: dict[str, Any]) -> None:
     """Print optional OpenCL GPU timing metrics."""
 
