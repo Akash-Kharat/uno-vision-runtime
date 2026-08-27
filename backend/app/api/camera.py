@@ -48,3 +48,35 @@ async def capture_frame(request: Request) -> Response:
         )
         
     return Response(content=encoded.tobytes(), media_type="image/jpeg")
+
+from fastapi.responses import StreamingResponse
+import asyncio
+
+async def mjpeg_generator(camera_manager):
+    last_seq = -1
+    while True:
+        frame_obj = camera_manager.get_latest_frame()
+        if not frame_obj or frame_obj.sequence_id == last_seq:
+            await asyncio.sleep(0.03)
+            continue
+            
+        last_seq = frame_obj.sequence_id
+        
+        if frame_obj.jpeg_bytes:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_obj.jpeg_bytes + b'\r\n')
+        else:
+            await asyncio.sleep(0.03)
+
+@router.get("/stream")
+async def stream_camera(request: Request) -> StreamingResponse:
+    """Stream MJPEG video from the camera."""
+    camera_manager = request.app.state.camera_manager
+    if camera_manager.state != "RUNNING":
+        from app.core.exceptions import AppError
+        raise AppError(code="CAMERA_NOT_RUNNING", message="Camera must be running to stream.", status_code=400)
+        
+    return StreamingResponse(
+        mjpeg_generator(camera_manager),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )

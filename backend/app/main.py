@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.api.health import router as health_router
 from app.api.camera import router as camera_router
+from app.api.models import router as models_router
 from app.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.lifecycle import lifespan
@@ -29,9 +30,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    from app.services.model_registry import ModelRegistry
+    from app.services.runtime_manager import RuntimeManager
+
+    from app.services.detection_service import DetectionService
+    from app.services.inference_runtime_manager import InferenceRuntimeManager
+    
     # Attach settings and managers so lifecycle and handlers can access them
     app.state.settings = settings
     app.state.camera_manager = CameraManager(settings)
+    app.state.model_registry = ModelRegistry(settings)
+    app.state.runtime_manager = RuntimeManager()
+    app.state.detection_service = DetectionService(
+        app.state.camera_manager, 
+        app.state.runtime_manager,
+        app.state.model_registry
+    )
+    app.state.inference_manager = InferenceRuntimeManager(
+        app.state.camera_manager,
+        app.state.detection_service,
+        target_fps=getattr(settings, "INFERENCE_TARGET_FPS", 5)
+    )
 
     # Exception handlers
     register_exception_handlers(app)
@@ -48,6 +67,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Versioned API routes
     app.include_router(health_router, prefix="/api/v1", tags=["health"])
     app.include_router(camera_router, prefix="/api/v1/camera", tags=["camera"])
+    app.include_router(models_router, prefix="/api/v1/models", tags=["models"])
+    
+    from app.api.detect import router as detect_router
+    app.include_router(detect_router, prefix="/api/v1/detect", tags=["inference"])
+    
+    from app.api.runtime import router as runtime_router
+    app.include_router(runtime_router, prefix="/api/v1/runtime", tags=["runtime"])
 
     return app
 

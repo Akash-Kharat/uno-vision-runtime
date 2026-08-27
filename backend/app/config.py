@@ -1,7 +1,9 @@
 """UNO Vision Runtime application configuration."""
 
 from typing import Literal
+from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -27,6 +29,11 @@ class Settings(BaseSettings):
     CAMERA_MIN_PIXEL_RANGE: int = 10
     CAMERA_RECONNECT_INTERVAL_SECONDS: int = 5
     CAMERA_STARTUP_TIMEOUT_SECONDS: int = 5
+
+    MODEL_STORAGE_PATH: str = "./data/models"
+    MAX_UPLOAD_SIZE_BYTES: int = Field(100 * 1024 * 1024, description="Maximum ONNX upload size.")
+    
+    INFERENCE_TARGET_FPS: int = Field(5, description="Target continuous inference frame rate.")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
