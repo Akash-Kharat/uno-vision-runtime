@@ -2,11 +2,15 @@
 
 import time
 import numpy as np
-import pyopencl as cl
 
 import argparse
 import time
+import sys
+from pathlib import Path
 import numpy as np
+
+# Add project root to Python path so `app` can be imported
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import get_settings
 from app.services.preprocessing import Preprocessor

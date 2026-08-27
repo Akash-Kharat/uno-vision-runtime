@@ -71,6 +71,11 @@ def test_benchmark_api_success(app_and_client):
     timings_mock.gpu_kernel_ms = None
     timings_mock.gpu_download_ms = None
     timings_mock.total_gpu_time_ms = None
+    timings_mock.host_input_prepare_ms = None
+    timings_mock.host_buffer_acquire_ms = None
+    timings_mock.host_enqueue_ms = None
+    timings_mock.host_sync_wait_ms = None
+    timings_mock.host_output_prepare_ms = None
     timings_mock.input_buffer_reused = None
     timings_mock.output_buffer_reused = None
     resp_mock.timings = timings_mock

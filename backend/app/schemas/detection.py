@@ -22,7 +22,15 @@ class DetectionTimings(BaseModel):
     inference_time_ms: float
     postprocessing_time_ms: float
     total_time_ms: float
-
+    
+    # OpenCL High-Resolution Host Timings
+    host_input_prepare_ms: float | None = None
+    host_buffer_acquire_ms: float | None = None
+    host_enqueue_ms: float | None = None
+    host_sync_wait_ms: float | None = None
+    host_output_prepare_ms: float | None = None
+    
+    # OpenCL Event/Hardware Timings
     gpu_upload_ms: float | None = None
     gpu_kernel_ms: float | None = None
     gpu_download_ms: float | None = None

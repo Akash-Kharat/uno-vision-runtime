@@ -133,6 +133,12 @@ class DetectionService:
         gpu_download_ms = timings.pop("gpu_download_ms", None)
         total_gpu_time_ms = timings.pop("total_gpu_time_ms", None)
         
+        host_input_prepare_ms = timings.pop("host_input_prepare_ms", None)
+        host_buffer_acquire_ms = timings.pop("host_buffer_acquire_ms", None)
+        host_enqueue_ms = timings.pop("host_enqueue_ms", None)
+        host_sync_wait_ms = timings.pop("host_sync_wait_ms", None)
+        host_output_prepare_ms = timings.pop("host_output_prepare_ms", None)
+        
         in_reused = timings.pop("input_buffer_reused", None)
         if in_reused is not None:
             in_reused = bool(in_reused)
@@ -153,6 +159,11 @@ class DetectionService:
                 inference_time_ms=inf_ms,
                 postprocessing_time_ms=post_ms,
                 total_time_ms=total_ms,
+                host_input_prepare_ms=host_input_prepare_ms,
+                host_buffer_acquire_ms=host_buffer_acquire_ms,
+                host_enqueue_ms=host_enqueue_ms,
+                host_sync_wait_ms=host_sync_wait_ms,
+                host_output_prepare_ms=host_output_prepare_ms,
                 gpu_upload_ms=gpu_upload_ms,
                 gpu_kernel_ms=gpu_kernel_ms,
                 gpu_download_ms=gpu_download_ms,
