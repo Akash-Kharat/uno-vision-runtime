@@ -45,6 +45,16 @@ class InferenceRuntimeManager:
         
         # Asyncio bridges
         self._result_callbacks: list[Callable[[InferenceResultSnapshot], None]] = []
+        
+        # Performance benchmarking history
+        from collections import deque
+        from app.config import get_settings
+        history_size = getattr(get_settings(), "PERFORMANCE_HISTORY_SIZE", 500)
+        self.history_total = deque(maxlen=history_size)
+        self.history_capture = deque(maxlen=history_size)
+        self.history_pre = deque(maxlen=history_size)
+        self.history_inf = deque(maxlen=history_size)
+        self.history_post = deque(maxlen=history_size)
 
     def register_callback(self, callback: Callable[[InferenceResultSnapshot], None]) -> None:
         """Register a callback for when a new result is ready. 
@@ -155,6 +165,15 @@ class InferenceRuntimeManager:
                     inf_ms = resp.inference_time_ms
                     self.stats.last_inference_time_ms = inf_ms
                     
+                    # Store timings directly into histories
+                    timings = resp.timings
+                    if timings:
+                        self.history_total.append(timings.total_time_ms)
+                        self.history_capture.append(timings.capture_time_ms)
+                        self.history_pre.append(timings.preprocessing_time_ms)
+                        self.history_inf.append(timings.inference_time_ms)
+                        self.history_post.append(timings.postprocessing_time_ms)
+                        
                     # Exponential moving average for time
                     if self.stats.successful_inference_count == 1:
                         self.stats.average_inference_time_ms = inf_ms
@@ -212,23 +231,50 @@ class InferenceRuntimeManager:
                 time.sleep(sleep_time)
 
     def get_status(self) -> dict:
+        import numpy as np
         with self.lock:
             session, desc = self.detection_service.runtime_manager.get_active_runtime()
             active_model = desc.model_id if desc else None
+            
+            providers = []
+            if session:
+                try:
+                    providers = session.get_providers()
+                except Exception:
+                    pass
+            
+            def calc_stats(dq):
+                if not dq:
+                    return {"mean": 0.0, "p50": 0.0, "p95": 0.0}
+                arr = np.array(dq)
+                return {
+                    "mean": float(np.mean(arr)),
+                    "p50": float(np.percentile(arr, 50)),
+                    "p95": float(np.percentile(arr, 95))
+                }
+            
             return {
                 "success": True,
                 "runtime": {
                     "state": self.state.value,
                     "target_fps": self.target_fps,
                     "active_model_id": active_model,
+                    "available_providers": providers,
+                    "active_providers": providers,
                     "latest_sequence_id": self._sequence_id,
                     "last_error": self.stats.last_error,
                     "stats": {
                         "total": self.stats.total_inference_count,
                         "success": self.stats.successful_inference_count,
                         "failed": self.stats.failed_inference_count,
-                        "avg_ms": self.stats.average_inference_time_ms,
-                        "fps": self.stats.effective_inference_fps
+                        "effective_fps": self.stats.effective_inference_fps,
+                        "avg_total_ms": calc_stats(self.history_total)["mean"],
+                        "avg_capture_ms": calc_stats(self.history_capture)["mean"],
+                        "avg_preprocessing_ms": calc_stats(self.history_pre)["mean"],
+                        "avg_inference_ms": calc_stats(self.history_inf)["mean"],
+                        "avg_postprocessing_ms": calc_stats(self.history_post)["mean"],
+                        "p50_total_ms": calc_stats(self.history_total)["p50"],
+                        "p95_total_ms": calc_stats(self.history_total)["p95"],
                     }
                 }
             }

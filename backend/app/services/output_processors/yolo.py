@@ -14,61 +14,96 @@ class YOLOOutputProcessor:
         outputs: list[np.ndarray],
         descriptor: ModelRuntimeDescriptor,
         preprocessing: PreprocessedInput,
+        profiler: "PerformanceProfiler" = None
     ) -> list[RawDetection]:
         if not outputs:
             return []
-
-        # Typically the first output is the detection tensor.
-        tensor = outputs[0]
-        
-        # Squeeze batch dimension if present (e.g. [1, 84, 8400] -> [84, 8400])
-        if len(tensor.shape) == 3 and tensor.shape[0] == 1:
-            tensor = tensor[0]
             
-        # Determine shape layout: we expect [features, boxes] or [boxes, features]
-        # Features usually include: 4 box coords + N classes (e.g., 4 + 80 = 84).
-        # Sometimes there's an objectness score (4 + 1 + 80 = 85).
-        # Identify the boxes dimension (the larger one usually).
-        if tensor.shape[0] < tensor.shape[1]:
-            # Layout is [features, boxes], e.g. [84, 8400]
-            tensor = tensor.transpose(1, 0) # Convert to [8400, 84]
+        class DummyProfiler:
+            def measure(self, name):
+                import contextlib
+                @contextlib.contextmanager
+                def dummy(): yield
+                return dummy()
+                
+        p = profiler or DummyProfiler()
 
-        profile = descriptor.profile
-        out_prof = profile.output
-        bbox_format = out_prof.bbox_format
-        conf_interp = out_prof.confidence_interpretation
-        conf_thresh = out_prof.confidence_threshold
+        with p.measure("output_decode_time_ms"):
+            tensor = outputs[0]
+            if len(tensor.shape) == 3 and tensor.shape[0] == 1:
+                tensor = tensor[0]
+            if tensor.shape[0] < tensor.shape[1]:
+                tensor = tensor.transpose(1, 0) # [8400, 84]
 
-        num_classes = len(profile.classes)
-        num_features = tensor.shape[1]
-        
-        if num_features < 4 + num_classes:
-            raise AppError(
-                code="INVALID_MODEL_OUTPUT", 
-                message=f"Output tensor features ({num_features}) is less than required box(4) + classes({num_classes})", 
-                status_code=500
-            )
+            profile = descriptor.profile
+            out_prof = profile.output
+            bbox_format = out_prof.bbox_format
+            conf_interp = out_prof.confidence_interpretation
+            conf_thresh = out_prof.confidence_threshold
 
-        detections = []
-        
-        for row in tensor:
-            # Parse bounding box based on configured format
+            num_classes = len(profile.classes)
+            num_features = tensor.shape[1]
+            
+            if num_features < 4 + num_classes:
+                raise AppError(
+                    code="INVALID_MODEL_OUTPUT", 
+                    message=f"Output tensor features ({num_features}) is less than required box(4) + classes({num_classes})", 
+                    status_code=500
+                )
+
+        with p.measure("confidence_filter_time_ms"):
+            # Extract scores and find max per box
+            if conf_interp == ConfidenceInterpretation.SIGMOID and num_features == 5 + num_classes:
+                objectness = tensor[:, 4]
+                class_scores = tensor[:, 5:5+num_classes]
+                confidences = objectness * np.max(class_scores, axis=1)
+                class_ids = np.argmax(class_scores, axis=1)
+            else:
+                class_scores = tensor[:, 4:4+num_classes]
+                confidences = np.max(class_scores, axis=1)
+                class_ids = np.argmax(class_scores, axis=1)
+                
+            mask = confidences >= conf_thresh
+            
+            surviving_boxes = tensor[mask, 0:4]
+            surviving_confidences = confidences[mask]
+            surviving_class_ids = class_ids[mask]
+            
+            if profiler and hasattr(profiler, "timings"):
+                if "diagnostics" not in profiler.timings:
+                    profiler.timings["diagnostics"] = {}
+                profiler.timings["diagnostics"]["raw_candidate_count"] = tensor.shape[0]
+                profiler.timings["diagnostics"]["confidence_filtered_count"] = len(surviving_boxes)
+
+        with p.measure("box_conversion_time_ms"):
+            if len(surviving_boxes) == 0:
+                return []
+                
             if bbox_format == BoundingBoxFormat.CXCYWH:
-                cx, cy, w, h = row[0:4]
+                cx = surviving_boxes[:, 0]
+                cy = surviving_boxes[:, 1]
+                w = surviving_boxes[:, 2]
+                h = surviving_boxes[:, 3]
                 x1 = cx - w / 2
                 y1 = cy - h / 2
                 x2 = cx + w / 2
                 y2 = cy + h / 2
             elif bbox_format == BoundingBoxFormat.XYWH:
-                x1, y1, w, h = row[0:4]
+                x1 = surviving_boxes[:, 0]
+                y1 = surviving_boxes[:, 1]
+                w = surviving_boxes[:, 2]
+                h = surviving_boxes[:, 3]
                 x2 = x1 + w
                 y2 = y1 + h
             elif bbox_format == BoundingBoxFormat.XYXY:
-                x1, y1, x2, y2 = row[0:4]
+                x1 = surviving_boxes[:, 0]
+                y1 = surviving_boxes[:, 1]
+                x2 = surviving_boxes[:, 2]
+                y2 = surviving_boxes[:, 3]
             else:
                 raise AppError(code="OUTPUT_PROCESSOR_UNSUPPORTED", message=f"Unsupported bbox format: {bbox_format}", status_code=500)
 
-            # Map from model coordinates back to original image coordinates
+        with p.measure("coordinate_restore_time_ms"):
             # Reverse padding
             x1 -= preprocessing.pad_x
             x2 -= preprocessing.pad_x
@@ -81,47 +116,32 @@ class YOLOOutputProcessor:
             y1 *= preprocessing.scale_y
             y2 *= preprocessing.scale_y
             
-            # Clamp to original image bounds
-            x1 = max(0, min(x1, preprocessing.original_width))
-            x2 = max(0, min(x2, preprocessing.original_width))
-            y1 = max(0, min(y1, preprocessing.original_height))
-            y2 = max(0, min(y2, preprocessing.original_height))
+            # Clamp
+            x1 = np.clip(x1, 0, preprocessing.original_width)
+            x2 = np.clip(x2, 0, preprocessing.original_width)
+            y1 = np.clip(y1, 0, preprocessing.original_height)
+            y2 = np.clip(y2, 0, preprocessing.original_height)
             
-            if x2 <= x1 or y2 <= y1:
-                continue
+            # Filter invalid boxes where x2 <= x1 or y2 <= y1
+            valid_mask = (x2 > x1) & (y2 > y1)
+            
+            x1 = x1[valid_mask]
+            y1 = y1[valid_mask]
+            x2 = x2[valid_mask]
+            y2 = y2[valid_mask]
+            surviving_confidences = surviving_confidences[valid_mask]
+            surviving_class_ids = surviving_class_ids[valid_mask]
 
-            # Parse confidence and class
-            if conf_interp == ConfidenceInterpretation.DIRECT:
-                # Direct means the scores are mutually exclusive or no objectness
-                class_scores = row[4:4+num_classes]
-                class_id = int(np.argmax(class_scores))
-                confidence = float(class_scores[class_id])
-            elif conf_interp == ConfidenceInterpretation.SIGMOID:
-                # e.g., objectness * class_score (YOLOv5 style, sometimes 85 features)
-                if num_features == 5 + num_classes:
-                    objectness = row[4]
-                    class_scores = row[5:5+num_classes]
-                    class_id = int(np.argmax(class_scores))
-                    confidence = float(objectness * class_scores[class_id])
-                else:
-                    # No explicit objectness, just sigmoid probabilities over classes (YOLOv8 style)
-                    class_scores = row[4:4+num_classes]
-                    class_id = int(np.argmax(class_scores))
-                    confidence = float(class_scores[class_id])
-            else:
-                # Default fallback
-                class_scores = row[4:4+num_classes]
-                class_id = int(np.argmax(class_scores))
-                confidence = float(class_scores[class_id])
-
-            if confidence >= conf_thresh:
-                detections.append(RawDetection(
-                    class_id=class_id,
-                    confidence=confidence,
-                    x1=float(x1),
-                    y1=float(y1),
-                    x2=float(x2),
-                    y2=float(y2)
-                ))
-
+        # Construct final raw detections for NMS
+        detections = []
+        for i in range(len(x1)):
+            detections.append(RawDetection(
+                class_id=int(surviving_class_ids[i]),
+                confidence=float(surviving_confidences[i]),
+                x1=float(x1[i]),
+                y1=float(y1[i]),
+                x2=float(x2[i]),
+                y2=float(y2[i])
+            ))
+            
         return detections

@@ -1,5 +1,6 @@
 """API Schemas for detection results."""
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel
 
 class BoundingBox(BaseModel):
@@ -21,6 +22,8 @@ class DetectionTimings(BaseModel):
     inference_time_ms: float
     postprocessing_time_ms: float
     total_time_ms: float
+    inner: dict[str, float] | None = None
+    diagnostics: dict[str, Any] | None = None
 
 class DetectionResponse(BaseModel):
     request_id: str

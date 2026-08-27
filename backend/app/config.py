@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_BYTES: int = Field(100 * 1024 * 1024, description="Maximum ONNX upload size.")
     
     INFERENCE_TARGET_FPS: int = Field(5, description="Target continuous inference frame rate.")
+    
+    # Performance & Optimization Defaults
+    PERFORMANCE_HISTORY_SIZE: int = Field(500, description="Size of rolling history deque for stats")
+    MAX_PRE_NMS_DETECTIONS: int = Field(300, description="Max candidate boxes to feed into NMS")
+    MAX_DETECTIONS: int = Field(100, description="Max final detections to output")
+    ENABLE_DETAILED_PROFILING: bool = Field(False, description="Turn on inner profiling steps by default")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

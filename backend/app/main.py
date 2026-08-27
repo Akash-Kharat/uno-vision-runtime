@@ -74,6 +74,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     
     from app.api.runtime import router as runtime_router
     app.include_router(runtime_router, prefix="/api/v1/runtime", tags=["runtime"])
+    
+    from app.api.benchmark import router as benchmark_router
+    app.include_router(benchmark_router, prefix="/api/v1/benchmark", tags=["benchmark"])
 
     return app
 
