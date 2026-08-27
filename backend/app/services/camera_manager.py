@@ -1,6 +1,7 @@
 """Camera Manager service."""
 
 import logging
+import platform
 import threading
 import time
 
@@ -55,7 +56,11 @@ class CameraManager:
             
             cap = None
             try:
-                cap = cv2.VideoCapture(self.settings.CAMERA_INDEX)
+                backend = cv2.CAP_ANY
+                if platform.system() == "Linux":
+                    backend = getattr(cv2, f"CAP_{self.settings.CAMERA_BACKEND.upper()}", cv2.CAP_ANY)
+                    
+                cap = cv2.VideoCapture(self.settings.CAMERA_INDEX, backend)
                 if not cap.isOpened():
                     self.state = "ERROR"
                     cap.release()
@@ -65,10 +70,18 @@ class CameraManager:
                         status_code=500
                     )
 
+                # Set format and properties
+                if self.settings.CAMERA_PIXEL_FORMAT:
+                    fourcc = cv2.VideoWriter_fourcc(*self.settings.CAMERA_PIXEL_FORMAT)
+                    cap.set(cv2.CAP_PROP_FOURCC, fourcc)
+                    
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.settings.CAMERA_WIDTH)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.CAMERA_HEIGHT)
+                
+                if self.settings.CAMERA_FPS > 0:
+                    cap.set(cv2.CAP_PROP_FPS, self.settings.CAMERA_FPS)
 
-                # Verify frame read
+                # Verify frame read and warmup
                 # Note: CAMERA_STARTUP_TIMEOUT_SECONDS is a retry deadline, not a strict interrupt.
                 # If cap.read() blocks indefinitely at the driver/OS level, this loop cannot preempt it.
                 # It only acts as a timeout if cap.read() returns quickly with False.
@@ -77,8 +90,11 @@ class CameraManager:
                 while (time.time() - start_time) < self.settings.CAMERA_STARTUP_TIMEOUT_SECONDS:
                     ret, frame = cap.read()
                     if ret and frame is not None:
-                        success = True
-                        break
+                        # Validate frame meets minimum pixel range requirement (reject black frames)
+                        pixel_range = int(np.max(frame)) - int(np.min(frame))
+                        if pixel_range >= self.settings.CAMERA_MIN_PIXEL_RANGE:
+                            success = True
+                            break
                     time.sleep(0.1)
                 
                 if not success:
@@ -86,7 +102,7 @@ class CameraManager:
                     cap.release()
                     raise AppError(
                         code="CAMERA_START_FAILED",
-                        message="Camera opened but failed to provide a frame.",
+                        message="Camera opened but failed to provide a valid warm-up frame.",
                         status_code=500
                     )
 

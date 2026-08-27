@@ -19,6 +19,13 @@ MOCK_SETTINGS = {
 }
 
 
+def valid_mock_frame():
+    """Return a mock frame with a valid pixel range."""
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame[0, 0] = 255
+    return frame
+
+
 @pytest.fixture
 def app():
     """Create test application."""
@@ -58,7 +65,7 @@ def test_successful_camera_startup(mock_video_capture, client, camera_manager):
     """Test starting the camera successfully."""
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
-    mock_cap.read.return_value = (True, np.zeros((720, 1280, 3), dtype=np.uint8))
+    mock_cap.read.return_value = (True, valid_mock_frame())
     mock_cap.get.side_effect = lambda prop: 1280 if prop == 3 else 720 # 3 is width, 4 is height
     mock_video_capture.return_value = mock_cap
 
@@ -93,7 +100,7 @@ def test_start_called_twice(mock_video_capture, client):
     """Test calling start when already running."""
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
-    mock_cap.read.return_value = (True, np.zeros((720, 1280, 3), dtype=np.uint8))
+    mock_cap.read.return_value = (True, valid_mock_frame())
     mock_cap.get.return_value = 1280
     mock_video_capture.return_value = mock_cap
 
@@ -128,7 +135,7 @@ def test_stop_called_while_running(mock_video_capture, client):
     """Test stopping an active camera."""
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
-    mock_cap.read.return_value = (True, np.zeros((720, 1280, 3), dtype=np.uint8))
+    mock_cap.read.return_value = (True, valid_mock_frame())
     mock_video_capture.return_value = mock_cap
 
     client.post("/api/v1/camera/start")
@@ -164,7 +171,7 @@ def test_successful_frame_capture(mock_imencode, mock_video_capture, client):
     """Test successful frame capture and encoding."""
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
-    mock_cap.read.return_value = (True, np.zeros((720, 1280, 3), dtype=np.uint8))
+    mock_cap.read.return_value = (True, valid_mock_frame())
     mock_video_capture.return_value = mock_cap
     
     mock_imencode.return_value = (True, np.array([1, 2, 3], dtype=np.uint8))
@@ -185,7 +192,7 @@ def test_failed_frame_capture(mock_video_capture, client):
     
     # First read for startup succeeds, second for capture fails
     mock_cap.read.side_effect = [
-        (True, np.zeros((720, 1280, 3), dtype=np.uint8)),
+        (True, valid_mock_frame()),
         (False, None)
     ]
     mock_video_capture.return_value = mock_cap
@@ -204,7 +211,7 @@ def test_failed_jpeg_encoding(mock_imencode, mock_video_capture, client):
     """Test handling of failed JPEG encoding."""
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
-    mock_cap.read.return_value = (True, np.zeros((720, 1280, 3), dtype=np.uint8))
+    mock_cap.read.return_value = (True, valid_mock_frame())
     mock_video_capture.return_value = mock_cap
     
     # Encoding fails
@@ -216,3 +223,58 @@ def test_failed_jpeg_encoding(mock_imencode, mock_video_capture, client):
     assert response.status_code == 500
     data = response.json()
     assert data["error"]["code"] == "CAMERA_JPEG_ENCODE_FAILED"
+
+
+@patch("platform.system")
+@patch("cv2.VideoCapture")
+def test_camera_startup_linux_backend(mock_video_capture, mock_platform, client):
+    """Test backend selection on Linux."""
+    mock_platform.return_value = "Linux"
+    mock_cap = MagicMock()
+    mock_cap.isOpened.return_value = True
+    mock_cap.read.return_value = (True, valid_mock_frame())
+    mock_video_capture.return_value = mock_cap
+    
+    import cv2
+    v4l2_id = getattr(cv2, "CAP_V4L2", getattr(cv2, "CAP_ANY", 0))
+    
+    client.post("/api/v1/camera/start")
+    mock_video_capture.assert_called_with(0, v4l2_id)
+
+
+@patch("cv2.VideoCapture")
+def test_camera_configuration(mock_video_capture, client):
+    """Test FOURCC and FPS configuration."""
+    mock_cap = MagicMock()
+    mock_cap.isOpened.return_value = True
+    mock_cap.read.return_value = (True, valid_mock_frame())
+    mock_video_capture.return_value = mock_cap
+    
+    import cv2
+    client.post("/api/v1/camera/start")
+    
+    calls = mock_cap.set.call_args_list
+    props_set = [call[0][0] for call in calls]
+    assert cv2.CAP_PROP_FOURCC in props_set
+    assert cv2.CAP_PROP_FPS in props_set
+    assert cv2.CAP_PROP_FRAME_WIDTH in props_set
+    assert cv2.CAP_PROP_FRAME_HEIGHT in props_set
+
+
+@patch("cv2.VideoCapture")
+def test_camera_startup_black_frame_timeout(mock_video_capture, client, camera_manager):
+    """Test that startup times out if only black frames are received."""
+    mock_cap = MagicMock()
+    mock_cap.isOpened.return_value = True
+    
+    # Always return a black frame
+    black_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    mock_cap.read.return_value = (True, black_frame)
+    mock_video_capture.return_value = mock_cap
+
+    response = client.post("/api/v1/camera/start")
+    assert response.status_code == 500
+    data = response.json()
+    assert data["error"]["code"] == "CAMERA_START_FAILED"
+    assert "valid warm-up frame" in data["error"]["message"]
+    assert mock_cap.read.call_count > 1
