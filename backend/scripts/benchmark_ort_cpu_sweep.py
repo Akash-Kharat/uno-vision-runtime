@@ -1,12 +1,24 @@
 import sys
 import subprocess
 import re
+import argparse
 from pathlib import Path
 
 def run_sweep():
+    parser = argparse.ArgumentParser(description="ONNX Runtime CPU Thread Sweep")
+    parser.add_argument("--model", type=str, required=True, help="Path to the ONNX model file")
+    args = parser.parse_args()
+    
+    model_path = Path(args.model)
+    if not model_path.exists():
+        print(f"Error: Model file not found at {model_path}")
+        sys.exit(1)
+        
     print("=================================================")
     print("ONNX RUNTIME CPU THREAD SWEEP")
     print("=================================================")
+    print(f"Model: {model_path}")
+    print()
     
     script_path = Path(__file__).parent / "benchmark_ort_cpu.py"
     
@@ -18,7 +30,6 @@ def run_sweep():
     for inter in inter_configs:
         for intra in intra_configs:
             print(f"Testing config: intra={intra}, inter={inter}")
-            model_path = Path(__file__).resolve().parent.parent / "data" / "models" / "yolov8n.onnx"
             cmd = [
                 sys.executable, str(script_path),
                 "--model", str(model_path),
