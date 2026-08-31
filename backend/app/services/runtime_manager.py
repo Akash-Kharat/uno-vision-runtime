@@ -19,9 +19,11 @@ class RuntimeManager:
         self.session_factory = session_factory
         self.active_descriptor: ModelRuntimeDescriptor | None = None
         self.active_session: ort.InferenceSession | None = None
+        self.active_session_options: dict = {}
         
         self.candidate_descriptor: ModelRuntimeDescriptor | None = None
         self.candidate_session: ort.InferenceSession | None = None
+        self.candidate_session_options: dict = {}
 
     def load_model(self, descriptor: ModelRuntimeDescriptor) -> None:
         """Load a model into memory as a candidate. Does not activate it."""
@@ -29,12 +31,15 @@ class RuntimeManager:
             if self.session_factory:
                 session_data = self.session_factory.create(descriptor.model_path)
                 session = session_data["session"]
+                options = session_data.get("options", {})
             else:
                 session = ort.InferenceSession(str(descriptor.model_path), providers=['CPUExecutionProvider'])
+                options = {}
             
             with self.lock:
                 self.candidate_descriptor = descriptor
                 self.candidate_session = session
+                self.candidate_session_options = options
                 
             logger.info(f"Successfully loaded candidate model {descriptor.model_id}")
             
@@ -59,10 +64,12 @@ class RuntimeManager:
             # Atomic swap
             self.active_session = self.candidate_session
             self.active_descriptor = self.candidate_descriptor
+            self.active_session_options = self.candidate_session_options
             
             # Clear candidate
             self.candidate_session = None
             self.candidate_descriptor = None
+            self.candidate_session_options = {}
             
             logger.info(f"Activated model {self.active_descriptor.model_id}")
 
@@ -76,6 +83,7 @@ class RuntimeManager:
         with self.lock:
             self.active_session = None
             self.active_descriptor = None
+            self.active_session_options = {}
             logger.info("Unloaded active model")
 
     def get_status(self) -> str:

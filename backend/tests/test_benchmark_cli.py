@@ -24,20 +24,18 @@ def test_cli_parsing_empty_data():
     test_script = f"""
 import sys
 import json
-import urllib.request
+import requests
 
 class MockResponse:
-    def read(self):
-        return json.dumps(payload).encode('utf-8')
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+    def __init__(self):
+        self.status_code = 200
+    def json(self):
+        return payload
 
-def mock_urlopen(req, *args, **kwargs):
+def mock_post(*args, **kwargs):
     return MockResponse()
 
-urllib.request.urlopen = mock_urlopen
+requests.post = mock_post
 
 payload_str = {repr(json.dumps(mock_payload))}
 payload = json.loads(payload_str)
@@ -60,8 +58,8 @@ runpy.run_path('scripts/benchmark_detection.py', run_name='__main__')
         if result.returncode != 0:
             print("STDERR:", result.stderr)
         assert "Total:" in out
-        assert "Mean:       N/A" in out
-        assert "P50:        N/A" in out
+        assert "Mean        N/A" in out
+        assert "P50         N/A" in out
         assert result.returncode == 0
         
     finally:
@@ -88,20 +86,18 @@ def test_cli_parsing_valid_data():
     test_script = f"""
 import sys
 import json
-import urllib.request
+import requests
 
 class MockResponse:
-    def read(self):
-        return json.dumps(payload).encode('utf-8')
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+    def __init__(self):
+        self.status_code = 200
+    def json(self):
+        return payload
 
-def mock_urlopen(req, *args, **kwargs):
+def mock_post(*args, **kwargs):
     return MockResponse()
 
-urllib.request.urlopen = mock_urlopen
+requests.post = mock_post
 
 payload_str = {repr(json.dumps(mock_payload))}
 payload = json.loads(payload_str)
@@ -124,8 +120,8 @@ runpy.run_path('scripts/benchmark_detection.py', run_name='__main__')
         if result.returncode != 0:
             print("STDERR:", result.stderr)
         assert "Total:" in out
-        assert "Mean:       10.51 ms" in out
-        assert "P95:        11.00 ms" in out
+        assert "Mean        10.51 ms" in out
+        assert "P95         11.00 ms" in out
         assert result.returncode == 0
         
     finally:

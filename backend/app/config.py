@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     MAX_DETECTIONS: int = Field(100, description="Max final detections to output")
     ENABLE_DETAILED_PROFILING: bool = Field(False, description="Turn on inner profiling steps by default")
     
+    # ONNX Runtime CPU Inference Configuration
+    ORT_INTRA_OP_THREADS: int = Field(0, description="Intra-op threads for CPU execution (0 = ORT default)")
+    ORT_INTER_OP_THREADS: int = Field(0, description="Inter-op threads for CPU execution (0 = ORT default)")
+    ORT_EXECUTION_MODE: str = Field("SEQUENTIAL", description="SEQUENTIAL or PARALLEL")
+    ORT_GRAPH_OPTIMIZATION: str = Field("ALL", description="DISABLE_ALL, BASIC, EXTENDED, ALL")
+    ORT_ENABLE_CPU_MEM_ARENA: bool = Field(True, description="Enable CPU memory arena")
+    ORT_ENABLE_MEM_PATTERN: bool = Field(True, description="Enable memory pattern optimization")
+    
     # Preprocessing & Hardware Acceleration
     ENABLE_OPENCL: bool = Field(True, description="Enable OpenCL backend discovery")
     OPENCL_DEVICE_TYPE: str = Field("ALL", description="GPU, CPU, or ALL")

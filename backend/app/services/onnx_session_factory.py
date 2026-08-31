@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 class ONNXSessionFactory:
     """Creates ONNX sessions decoupling hardware logic from business logic."""
     
-    def __init__(self, provider_manager: ExecutionProviderManager):
+    def __init__(self, provider_manager: ExecutionProviderManager, config=None):
         self.provider_manager = provider_manager
+        self.config = config
 
     def create(self, model_path: Path | str, override_providers: list[str] | None = None) -> dict:
         """
@@ -24,15 +25,55 @@ class ONNXSessionFactory:
           - requested_providers: list[str]
           - actual_providers: list[str]
           - creation_time_ms: float
+          - options: dict
         """
         path_str = str(model_path)
         
         providers = override_providers if override_providers else self.provider_manager.get_providers()
         
+        opts = ort.SessionOptions()
+        applied_options = {}
+        
+        if self.config and "CPUExecutionProvider" in providers:
+            # Map enum strings
+            exec_mode_map = {
+                "SEQUENTIAL": ort.ExecutionMode.ORT_SEQUENTIAL,
+                "PARALLEL": ort.ExecutionMode.ORT_PARALLEL
+            }
+            opt_level_map = {
+                "DISABLE_ALL": ort.GraphOptimizationLevel.ORT_DISABLE_ALL,
+                "BASIC": ort.GraphOptimizationLevel.ORT_ENABLE_BASIC,
+                "EXTENDED": ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+                "ALL": ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            }
+            
+            intra = getattr(self.config, "ORT_INTRA_OP_THREADS", 0)
+            inter = getattr(self.config, "ORT_INTER_OP_THREADS", 0)
+            mode = getattr(self.config, "ORT_EXECUTION_MODE", "SEQUENTIAL").upper()
+            opt_level = getattr(self.config, "ORT_GRAPH_OPTIMIZATION", "ALL").upper()
+            arena = getattr(self.config, "ORT_ENABLE_CPU_MEM_ARENA", True)
+            pattern = getattr(self.config, "ORT_ENABLE_MEM_PATTERN", True)
+            
+            opts.intra_op_num_threads = intra
+            opts.inter_op_num_threads = inter
+            opts.execution_mode = exec_mode_map.get(mode, ort.ExecutionMode.ORT_SEQUENTIAL)
+            opts.graph_optimization_level = opt_level_map.get(opt_level, ort.GraphOptimizationLevel.ORT_ENABLE_ALL)
+            opts.enable_cpu_mem_arena = arena
+            opts.enable_mem_pattern = pattern
+            
+            applied_options = {
+                "intra_op_num_threads": opts.intra_op_num_threads,
+                "inter_op_num_threads": opts.inter_op_num_threads,
+                "execution_mode": mode,
+                "graph_optimization_level": opt_level,
+                "enable_cpu_mem_arena": opts.enable_cpu_mem_arena,
+                "enable_mem_pattern": opts.enable_mem_pattern
+            }
+
         t0 = time.perf_counter()
         
         try:
-            session = ort.InferenceSession(path_str, providers=providers)
+            session = ort.InferenceSession(path_str, providers=providers, sess_options=opts)
         except Exception as e:
             if override_providers:
                 # If explicit benchmark failed
@@ -43,7 +84,7 @@ class ONNXSessionFactory:
                 self.provider_manager.record_initialization_error(providers[0], str(e))
                 logger.warning("Falling back to CPUExecutionProvider")
                 try:
-                    session = ort.InferenceSession(path_str, providers=["CPUExecutionProvider"])
+                    session = ort.InferenceSession(path_str, providers=["CPUExecutionProvider"], sess_options=opts)
                 except Exception as e_cpu:
                     raise AppError(code="SESSION_INIT_FAILED", message=f"CPU fallback failed: {str(e_cpu)}", status_code=500)
             else:
@@ -61,5 +102,6 @@ class ONNXSessionFactory:
             "session": session,
             "requested_providers": providers,
             "actual_providers": actual,
-            "creation_time_ms": (t1 - t0) * 1000.0
+            "creation_time_ms": (t1 - t0) * 1000.0,
+            "options": applied_options
         }

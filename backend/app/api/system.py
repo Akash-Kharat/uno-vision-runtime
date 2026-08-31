@@ -87,16 +87,19 @@ async def get_diagnostics(request: Request):
     session, desc = detection_service.runtime_manager.get_active_runtime()
     
     actual_providers = []
+    active_options = {}
     if session:
         try:
             actual_providers = session.get_providers()
         except Exception:
             pass
+        active_options = detection_service.runtime_manager.active_session_options
             
     return {
         "success": True,
         "active_provider": manager.active_provider,
         "session_provider_chain": actual_providers,
         "model_id": desc.model_id if desc else None,
-        "session_initialized": session is not None
+        "session_initialized": session is not None,
+        "session_options": active_options
     }

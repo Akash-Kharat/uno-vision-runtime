@@ -51,7 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     
     # Initialize execution provider manager
     ep_manager = ExecutionProviderManager()
-    session_factory = ONNXSessionFactory(ep_manager)
+    session_factory = ONNXSessionFactory(ep_manager, settings)
     
     runtime_manager = RuntimeManager(session_factory=session_factory)
     detection_service = DetectionService(
