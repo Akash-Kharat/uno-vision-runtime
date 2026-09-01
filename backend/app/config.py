@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     ENABLE_DETAILED_PROFILING: bool = Field(False, description="Turn on inner profiling steps by default")
     
     # ONNX Runtime CPU Inference Configuration
-    ORT_INTRA_OP_THREADS: int = Field(0, description="Intra-op threads for CPU execution (0 = ORT default)")
-    ORT_INTER_OP_THREADS: int = Field(0, description="Inter-op threads for CPU execution (0 = ORT default)")
+    ORT_INTRA_OP_THREADS: int = Field(4, description="Intra-op threads for CPU execution (0 = ORT default)")
+    ORT_INTER_OP_THREADS: int = Field(2, description="Inter-op threads for CPU execution (0 = ORT default)")
     ORT_EXECUTION_MODE: str = Field("SEQUENTIAL", description="SEQUENTIAL or PARALLEL")
     ORT_GRAPH_OPTIMIZATION: str = Field("ALL", description="DISABLE_ALL, BASIC, EXTENDED, ALL")
     ORT_ENABLE_CPU_MEM_ARENA: bool = Field(True, description="Enable CPU memory arena")
