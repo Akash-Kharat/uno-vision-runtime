@@ -278,3 +278,26 @@ def test_camera_startup_black_frame_timeout(mock_video_capture, client, camera_m
     assert data["error"]["code"] == "CAMERA_START_FAILED"
     assert "valid warm-up frame" in data["error"]["message"]
     assert mock_cap.read.call_count > 1
+
+
+def test_camera_device_selection(app, client):
+    """Test explicit CAMERA_DEVICE selection."""
+    app.state.camera_manager.settings.CAMERA_DEVICE = "/dev/video2"
+    
+    with patch("cv2.VideoCapture") as mock_video_capture:
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        mock_cap.read.return_value = (True, valid_mock_frame())
+        mock_video_capture.return_value = mock_cap
+        
+        response = client.post("/api/v1/camera/start")
+        assert response.status_code == 200
+        
+        # Verify it passed the path
+        args, kwargs = mock_video_capture.call_args
+        assert args[0] == "/dev/video2"
+        
+        data = response.json()
+        assert data["camera"]["device"] == "/dev/video2"
+
+    app.state.camera_manager.settings.CAMERA_DEVICE = None

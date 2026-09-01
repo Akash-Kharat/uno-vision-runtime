@@ -9,6 +9,7 @@ class CameraStateDetail(BaseModel):
     
     state: Literal["STOPPED", "STARTING", "RUNNING", "ERROR"]
     index: int
+    device: str | None = None
     requested_width: int
     requested_height: int
     # Actual dimensions are set to null when the camera is not RUNNING

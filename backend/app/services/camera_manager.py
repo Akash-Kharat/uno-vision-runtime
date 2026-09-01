@@ -52,6 +52,7 @@ class CameraManager:
             camera=CameraStateDetail(
                 state=self.state, # type: ignore[arg-type]
                 index=self.settings.CAMERA_INDEX,
+                device=self.settings.CAMERA_DEVICE,
                 requested_width=self.settings.CAMERA_WIDTH,
                 requested_height=self.settings.CAMERA_HEIGHT,
                 actual_width=self.actual_width,
@@ -117,13 +118,14 @@ class CameraManager:
                 if platform.system() == "Linux":
                     backend = getattr(cv2, f"CAP_{self.settings.CAMERA_BACKEND.upper()}", cv2.CAP_ANY)
                     
-                cap = cv2.VideoCapture(self.settings.CAMERA_INDEX, backend)
+                target = self.settings.CAMERA_DEVICE if self.settings.CAMERA_DEVICE else self.settings.CAMERA_INDEX
+                cap = cv2.VideoCapture(target, backend)
                 if not cap.isOpened():
                     self.state = "ERROR"
                     cap.release()
                     raise AppError(
                         code="CAMERA_START_FAILED",
-                        message=f"Failed to open camera index {self.settings.CAMERA_INDEX}",
+                        message=f"Failed to open camera device {target}",
                         status_code=500
                     )
 
@@ -170,7 +172,7 @@ class CameraManager:
                 self._capture_thread.start()
                 
                 logger.info("Camera %s started successfully: %sx%s", 
-                            self.settings.CAMERA_INDEX, self.actual_width, self.actual_height)
+                            target, self.actual_width, self.actual_height)
                 
                 return self._build_status()
 
@@ -207,7 +209,8 @@ class CameraManager:
             # Wake up anyone waiting for frames
             self.condition.notify_all()
             
-            logger.info("Camera %s stopped.", self.settings.CAMERA_INDEX)
+            target = self.settings.CAMERA_DEVICE if self.settings.CAMERA_DEVICE else self.settings.CAMERA_INDEX
+            logger.info("Camera %s stopped.", target)
             
             return self._build_status()
             
