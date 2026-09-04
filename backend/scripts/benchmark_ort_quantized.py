@@ -1,6 +1,9 @@
 import sys
 import time
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 from pathlib import Path
 import numpy as np
 import onnxruntime as ort
