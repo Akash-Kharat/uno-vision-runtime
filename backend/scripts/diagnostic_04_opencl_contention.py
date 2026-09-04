@@ -26,14 +26,20 @@ def run_benchmark(session, dummy_input: np.ndarray, warmup: int = 10, iterations
     return np.mean(latencies)
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default="data/models/models/mdl_0f92eb15da2d/model.onnx")
+    args = parser.parse_args()
+    
     print("==================================================")
-    print("DIAGNOSTIC 04: OPENCL CONTENTION TEST")
+    print(f"DIAGNOSTIC 04: OPENCL CONTENTION TEST ({args.model})")
     print("==================================================")
     
     settings = get_settings()
-    model_path = Path(settings.MODEL_STORAGE_PATH) / "models" / "mdl_0f92eb15da2d" / "model.onnx"
+    model_path = Path(args.model)
     if not model_path.exists():
-        model_path = Path(__file__).resolve().parent.parent / "data" / "models" / "yolov8n.onnx"
+        print(f"Model {model_path} not found!")
+        return
         
     # Setup ORT
     opts = ort.SessionOptions()
