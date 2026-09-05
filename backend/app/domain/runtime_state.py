@@ -33,3 +33,9 @@ class InferenceStats:
     average_inference_time_ms: float = 0.0
     effective_inference_fps: float = 0.0
     last_error: str | None = None
+    # Scheduler observability metrics
+    frames_captured: int = 0
+    frames_inferred: int = 0
+    frames_skipped: int = 0
+    dropped_frames: int = 0
+    inference_busy: bool = False
