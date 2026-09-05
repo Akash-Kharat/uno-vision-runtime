@@ -68,6 +68,10 @@ class OpenCLBackend(ComputeBackend):
         
         orig_h, orig_w = frame.shape[:2]
         
+        # If profile doesn't declare dims, raise so CPU fallback is triggered
+        if not target_w or not target_h:
+            raise RuntimeError("Profile missing input width/height — OpenCL cannot determine resize target")
+        
         scale = min(target_w / orig_w, target_h / orig_h)
         new_w = int(orig_w * scale)
         new_h = int(orig_h * scale)

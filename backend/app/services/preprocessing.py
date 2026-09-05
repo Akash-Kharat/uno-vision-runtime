@@ -16,7 +16,7 @@ class Preprocessor:
         self.backend = backend
         self.config = config
 
-    def preprocess_frame(self, frame: np.ndarray, profile: ModelProfile, profiler: Any = None) -> PreprocessedInput:
+    def preprocess_frame(self, frame: np.ndarray, profile: ModelProfile, profiler: Any = None, inspection=None) -> PreprocessedInput:
         """Preprocesses a BGR OpenCV frame according to the model profile."""
         if frame is None or frame.size == 0:
             raise AppError(code="PREPROCESSING_FAILED", message="Empty frame provided", status_code=500)
@@ -37,6 +37,16 @@ class Preprocessor:
         input_prof = profile.input
         target_w = input_prof.width
         target_h = input_prof.height
+
+        # If not set in profile, derive from ONNX inspection shape (e.g. [1, C, H, W])
+        if (not target_w or not target_h) and inspection is not None:
+            try:
+                shape = inspection.inputs[0].shape  # e.g. [1, 3, 416, 416]
+                if shape and len(shape) == 4:
+                    target_h = int(shape[2])
+                    target_w = int(shape[3])
+            except Exception:
+                pass
 
         if not target_w or not target_h:
             raise AppError(code="PREPROCESSING_FAILED", message="Model profile missing input dimensions", status_code=500)

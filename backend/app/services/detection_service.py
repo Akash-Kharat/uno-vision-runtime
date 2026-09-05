@@ -44,7 +44,10 @@ class DetectionService:
             # 4. Preprocessing
             with p.measure("preprocessing_time_ms"):
                 try:
-                    preprocessed = self.preprocessor.preprocess_frame(frame, descriptor.profile, profiler=p)
+                    preprocessed = self.preprocessor.preprocess_frame(
+                        frame, descriptor.profile, profiler=p,
+                        inspection=descriptor.inspection_result
+                    )
                 except Exception as e:
                     raise AppError(code="PREPROCESSING_FAILED", message=str(e), status_code=500)
                 
