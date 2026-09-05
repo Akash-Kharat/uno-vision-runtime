@@ -148,16 +148,25 @@ class InferenceRuntimeManager:
                     time.sleep(0.05)
                     continue
                     
+                # Update total frames captured since last check
+                self.stats.frames_captured = latest_frame.sequence_id
+                    
                 # Skip if we already processed this frame
-                if latest_frame.sequence_id == last_frame_seq:
+                if latest_frame.sequence_id <= last_frame_seq:
                     time.sleep(0.01)
                     continue
                     
+                # Calculate how many frames were skipped
+                skipped = (latest_frame.sequence_id - last_frame_seq - 1) if last_frame_seq > 0 else 0
+                self.stats.frames_skipped += skipped
+                    
                 # Run detection
-                # We can call detection_service.detect_current_frame() directly because it grabs the latest frame!
+                self.stats.inference_busy = True
                 resp = self.detection_service.detect_current_frame()
+                self.stats.inference_busy = False
                 
                 with self.lock:
+                    self.stats.frames_inferred += 1
                     self._sequence_id += 1
                     self.stats.total_inference_count += 1
                     self.stats.successful_inference_count += 1
@@ -191,7 +200,8 @@ class InferenceRuntimeManager:
                     self._latest_result = InferenceResultSnapshot(
                         sequence_id=self._sequence_id,
                         frame_sequence_id=latest_frame.sequence_id,
-                        timestamp=time.time(),
+                        frame_timestamp=latest_frame.timestamp,
+                        detection_timestamp=time.time(),
                         model_id=resp.model_id,
                         response=resp
                     )
@@ -208,21 +218,24 @@ class InferenceRuntimeManager:
                 last_frame_seq = latest_frame.sequence_id
 
             except AppError as e:
-                # E.g. CAMERA_NOT_RUNNING or MODEL_NOT_ACTIVE can happen during the loop if stopped concurrently
+                self.stats.inference_busy = False
                 with self.lock:
                     if not self._stop_event.is_set():
                         self.stats.failed_inference_count += 1
                         self.stats.last_error = e.message
-                        self.state = InferenceState.ERROR
-                break
+                        # Do not transition to ERROR state, just log and continue
+                logger.error(f"Inference AppError: {e.message}")
+                time.sleep(1.0) # Backoff
+                continue
             except Exception as e:
+                self.stats.inference_busy = False
                 with self.lock:
                     if not self._stop_event.is_set():
                         self.stats.failed_inference_count += 1
                         self.stats.last_error = str(e)
-                        self.state = InferenceState.ERROR
-                        logger.exception("Unexpected error in inference loop")
-                break
+                logger.exception("Unexpected error in inference loop")
+                time.sleep(1.0) # Backoff
+                continue
                 
             # Pacing
             elapsed = time.perf_counter() - loop_start
@@ -275,6 +288,12 @@ class InferenceRuntimeManager:
                         "avg_postprocessing_ms": calc_stats(self.history_post)["mean"],
                         "p50_total_ms": calc_stats(self.history_total)["p50"],
                         "p95_total_ms": calc_stats(self.history_total)["p95"],
+                        "frames_captured": self.stats.frames_captured,
+                        "frames_inferred": self.stats.frames_inferred,
+                        "frames_skipped": self.stats.frames_skipped,
+                        "dropped_frames": self.stats.dropped_frames,
+                        "latest_detection_age_ms": self._latest_result.detection_age_ms if self._latest_result else None,
+                        "inference_busy": self.stats.inference_busy
                     }
                 }
             }
@@ -286,7 +305,9 @@ class InferenceRuntimeManager:
             return {
                 "sequence_id": self._latest_result.sequence_id,
                 "frame_sequence_id": self._latest_result.frame_sequence_id,
-                "timestamp": self._latest_result.timestamp,
+                "frame_timestamp": self._latest_result.frame_timestamp,
+                "detection_timestamp": self._latest_result.detection_timestamp,
+                "detection_age_ms": self._latest_result.detection_age_ms,
                 "model_id": self._latest_result.model_id,
                 "payload": self._latest_result.response.model_dump()
             }
