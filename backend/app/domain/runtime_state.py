@@ -10,7 +10,9 @@ class InferenceState(str, Enum):
     STOPPED = "STOPPED"
     STARTING = "STARTING"
     RUNNING = "RUNNING"
-    PAUSED = "PAUSED"
+    INFERENCE = "INFERENCE"
+    WAITING = "WAITING"
+    DEGRADED = "DEGRADED"
     STOPPING = "STOPPING"
     ERROR = "ERROR"
 
@@ -36,8 +38,9 @@ class InferenceStats:
     effective_inference_fps: float = 0.0
     last_error: str | None = None
     # Scheduler observability metrics
-    frames_captured: int = 0
-    frames_inferred: int = 0
-    frames_skipped: int = 0
-    dropped_frames: int = 0
+    captured_frames: int = 0
+    inferred_frames: int = 0
+    skipped_frames: int = 0
+    inference_failures: int = 0
+    latest_frame_age_ms: float | None = None
     inference_busy: bool = False

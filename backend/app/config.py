@@ -29,11 +29,13 @@ class Settings(BaseSettings):
     CAMERA_HEIGHT: int = 720
     CAMERA_BACKEND: str = "ANY"
     CAMERA_PIXEL_FORMAT: str = "YUYV"
-    CAMERA_FPS: int = 5
+    CAMERA_FPS: int = 30
     CAMERA_MIN_PIXEL_RANGE: int = 10
     CAMERA_RECONNECT_INTERVAL_SECONDS: int = 5
     CAMERA_STARTUP_TIMEOUT_SECONDS: int = 5
 
+    # Runtime Settings
+    RUNTIME_TARGET_FPS: float = 2.5
     MODEL_STORAGE_PATH: str = "./data/models"
     MAX_UPLOAD_SIZE_BYTES: int = Field(100 * 1024 * 1024, description="Maximum ONNX upload size.")
     

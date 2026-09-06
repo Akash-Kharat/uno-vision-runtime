@@ -17,16 +17,6 @@ async def start_inference(request: Request):
     request.app.state.inference_manager.start()
     return request.app.state.inference_manager.get_status()
 
-@router.post("/pause")
-async def pause_inference(request: Request):
-    request.app.state.inference_manager.pause()
-    return request.app.state.inference_manager.get_status()
-
-@router.post("/resume")
-async def resume_inference(request: Request):
-    request.app.state.inference_manager.resume()
-    return request.app.state.inference_manager.get_status()
-
 @router.post("/stop")
 async def stop_inference(request: Request):
     request.app.state.inference_manager.stop()
