@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     CAMERA_INDEX: int = 0
     CAMERA_WIDTH: int = 1280
     CAMERA_HEIGHT: int = 720
-    CAMERA_BACKEND: str = "V4L2"
+    CAMERA_BACKEND: str = "ANY"
     CAMERA_PIXEL_FORMAT: str = "YUYV"
-    CAMERA_FPS: int = 30
+    CAMERA_MAX_FPS: int = 30
     CAMERA_MIN_PIXEL_RANGE: int = 10
     CAMERA_RECONNECT_INTERVAL_SECONDS: int = 5
     CAMERA_STARTUP_TIMEOUT_SECONDS: int = 5
