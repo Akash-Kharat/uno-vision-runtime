@@ -60,6 +60,8 @@ def register_model():
         },
         "output": {
             "processor": "YOLO",
+            "bbox_format": "CXCYWH",
+            "confidence_interpretation": "RAW_PROBABILITIES",
             "confidence_threshold": 0.25,
             "nms_threshold": 0.45
         },
