@@ -20,6 +20,8 @@ class InferenceResultSnapshot:
     sequence_id: int
     frame_sequence_id: int
     timestamp: float
+    frame_timestamp: float
+    detection_timestamp: float
     model_id: str
     response: DetectionResponse
 
