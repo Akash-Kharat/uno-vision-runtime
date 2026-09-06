@@ -293,13 +293,14 @@ class InferenceRuntimeManager:
                         "frames_inferred": self.stats.frames_inferred,
                         "frames_skipped": self.stats.frames_skipped,
                         "dropped_frames": self.stats.dropped_frames,
-                        "latest_detection_age_ms": self._latest_result.detection_age_ms if self._latest_result else None,
+                        "latest_detection_age_ms": ((time.time() - self._latest_result.frame_timestamp) * 1000) if self._latest_result else None,
                         "inference_busy": self.stats.inference_busy
                     }
                 }
             }
             
     def get_latest_result(self) -> dict | None:
+        """Get the most recent inference result as a dict."""
         with self.lock:
             if not self._latest_result:
                 return None
@@ -308,7 +309,7 @@ class InferenceRuntimeManager:
                 "frame_sequence_id": self._latest_result.frame_sequence_id,
                 "frame_timestamp": self._latest_result.frame_timestamp,
                 "detection_timestamp": self._latest_result.detection_timestamp,
-                "detection_age_ms": self._latest_result.detection_age_ms,
+                "detection_age_ms": (time.time() - self._latest_result.frame_timestamp) * 1000,
                 "model_id": self._latest_result.model_id,
                 "payload": self._latest_result.response.model_dump()
             }
