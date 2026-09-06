@@ -145,7 +145,7 @@ class InferenceRuntimeManager:
                     self._sequence_id += 1
                     
                     # Process metrics
-                    timings = resp.performance_metrics
+                    timings = resp.timings
                     if timings:
                         self.history_total.append(timings.total_time_ms)
                         self.history_capture.append(timings.capture_time_ms)
