@@ -200,6 +200,7 @@ class InferenceRuntimeManager:
                     self._latest_result = InferenceResultSnapshot(
                         sequence_id=self._sequence_id,
                         frame_sequence_id=latest_frame.sequence_id,
+                        timestamp=time.time(),
                         frame_timestamp=latest_frame.timestamp,
                         detection_timestamp=time.time(),
                         model_id=resp.model_id,
