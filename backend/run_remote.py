@@ -6,7 +6,7 @@ def run_cmd(cmd):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        client.connect('192.168.31.216', username='arduino', password='Micro@4545', timeout=10)
+        client.connect('10.131.44.145', username='arduino', password='Micro@4545', timeout=10)
         stdin, stdout, stderr = client.exec_command(cmd)
         
         exit_status = stdout.channel.recv_exit_status()

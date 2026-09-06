@@ -1,7 +1,7 @@
 """Start uvicorn + validation on the board, detached from SSH session."""
 import paramiko, time, sys
 
-HOST = "192.168.31.216"
+HOST = "10.131.44.145"
 USER = "arduino"
 PASS = "Micro@4545"
 

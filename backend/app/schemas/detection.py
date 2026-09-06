@@ -15,6 +15,17 @@ class DetectedObject(BaseModel):
     class_name: str
     confidence: float
     bbox: BoundingBox
+    
+    # Tracking fields
+    track_id: int | None = None
+    source: str = "detection"
+    first_seen: float | None = None
+    last_seen: float | None = None
+    age: float | None = None
+    detection_age_ms: float | None = None
+    prediction_age_ms: float | None = None
+    velocity_x: float | None = None
+    velocity_y: float | None = None
 
 class DetectionTimings(BaseModel):
     capture_time_ms: float

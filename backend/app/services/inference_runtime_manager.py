@@ -8,6 +8,7 @@ from collections import deque
 from app.domain.runtime_state import InferenceState, InferenceResultSnapshot, InferenceStats
 from app.services.camera_manager import CameraManager
 from app.services.detection_service import DetectionService
+from app.services.tracker import SimpleTracker
 from app.core.exceptions import AppError
 from app.config import get_settings
 
@@ -32,6 +33,7 @@ class InferenceRuntimeManager:
         self.detection_service = detection_service
         self.target_fps = get_settings().RUNTIME_TARGET_FPS
         self._target_interval = 1.0 / self.target_fps if self.target_fps > 0 else 0.2
+        self.tracker = SimpleTracker()
         
         self.lock = threading.Lock()
         self.state = InferenceState.STOPPED
@@ -156,6 +158,10 @@ class InferenceRuntimeManager:
                         self.stats.last_inference_time_ms = timings.total_time_ms
                         self.stats.average_inference_time_ms = sum(self.history_inf) / len(self.history_inf) if self.history_inf else 0.0
 
+                    # Update tracker
+                    self.tracker.update(resp.objects, time.perf_counter())
+                    resp.objects = self.tracker.predict(time.perf_counter())
+
                     self._latest_result = InferenceResultSnapshot(
                         sequence_id=self._sequence_id,
                         frame_sequence_id=latest_frame.sequence_id,
@@ -231,12 +237,36 @@ class InferenceRuntimeManager:
                     "inferred_frames": self.stats.inferred_frames,
                     "skipped_frames": self.stats.skipped_frames,
                     "inference_failures": self.stats.inference_failures,
-                    "latest_detection_age_ms": ((time.time() - self._latest_result.frame_timestamp) * 1000) if self._latest_result else None,
+                    "latest_detection_age_ms": ((time.perf_counter() - self._latest_result.frame_timestamp) * 1000) if self._latest_result else None,
                     "inference_busy": self.stats.inference_busy
                 }
             }
         return {"success": True, "runtime": status}
         
+    def get_latest_tracked_result(self) -> dict | None:
+        """Returns the predicted results at current timestamp for 30fps streaming."""
+        with self.lock:
+            if not self._latest_result:
+                return None
+            
+            # Create a predicted copy
+            pred_objects = self.tracker.predict(time.perf_counter())
+            
+            # Serialize
+            payload = self._latest_result.response.model_dump()
+            payload["objects"] = [obj.model_dump() for obj in pred_objects]
+            
+            return {
+                "sequence_id": self._latest_result.sequence_id,
+                "frame_sequence_id": self._latest_result.frame_sequence_id,
+                "frame_timestamp": self._latest_result.frame_timestamp,
+                "detection_timestamp": self._latest_result.detection_timestamp,
+                "detection_age_ms": (time.perf_counter() - self._latest_result.frame_timestamp) * 1000,
+                "inference_duration_ms": self.stats.last_inference_time_ms,
+                "model_id": self._latest_result.model_id,
+                "payload": payload
+            }
+            
     def get_latest_result(self) -> dict | None:
         with self.lock:
             if not self._latest_result:
@@ -246,7 +276,7 @@ class InferenceRuntimeManager:
                 "frame_sequence_id": self._latest_result.frame_sequence_id,
                 "frame_timestamp": self._latest_result.frame_timestamp,
                 "detection_timestamp": self._latest_result.detection_timestamp,
-                "detection_age_ms": (time.time() - self._latest_result.frame_timestamp) * 1000,
+                "detection_age_ms": (time.perf_counter() - self._latest_result.frame_timestamp) * 1000,
                 "inference_duration_ms": self.stats.last_inference_time_ms,
                 "model_id": self._latest_result.model_id,
                 "payload": self._latest_result.response.model_dump()
