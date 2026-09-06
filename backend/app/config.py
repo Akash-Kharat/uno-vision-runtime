@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # the Venus video decoder (/dev/video0) rather than a physical camera. 
     # Use CAMERA_DEVICE (e.g. /dev/video2) for robust V4L2 device selection.
     CAMERA_DEVICE: str | None = None
-    CAMERA_INDEX: int = 0
+    CAMERA_INDEX: int = 2
     CAMERA_WIDTH: int = 1280
     CAMERA_HEIGHT: int = 720
     CAMERA_BACKEND: str = "ANY"
